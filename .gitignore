@@ -421,3 +421,5 @@ htmlcov/
 # -------------------- Claude Code --------------------
 # Claude Code specific files
 CLAUDE.md.local
+
+!client/lib/
