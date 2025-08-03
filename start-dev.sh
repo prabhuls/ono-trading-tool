@@ -4,6 +4,12 @@
 # Default mode: Hybrid (Database in Docker, Apps native for hot-reloading)
 # For full Docker mode, use: docker-compose up
 
+# Check for local override script
+if [ -f "start-dev.local.sh" ]; then
+    echo "Using local override script: start-dev.local.sh"
+    exec ./start-dev.local.sh "$@"
+fi
+
 set -e
 
 # Colors for output
@@ -84,9 +90,9 @@ else
     source .env
     set +a
 else
-    print_error ".env file not found"
-    exit 1
-fi
+        echo -e "${YELLOW}Error: .env file not found${NC}"
+        exit 1
+    fi
     uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 &
     BACKEND_PID=$!
     cd ..

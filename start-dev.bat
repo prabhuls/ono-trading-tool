@@ -33,13 +33,13 @@ if %errorlevel% neq 0 (
     echo.
 ) else (
     echo Starting PostgreSQL and Redis in Docker...
-    docker-compose up -d postgres redis
+    docker compose up -d postgres redis
     
     REM Wait for PostgreSQL to be ready
     echo Waiting for database...
     set count=0
     :wait_loop
-    docker-compose exec -T postgres pg_isready -U postgres >nul 2>&1
+    docker compose exec -T postgres pg_isready -U postgres >nul 2>&1
     if %errorlevel% equ 0 (
         echo Database is ready!
         goto :db_ready
@@ -53,6 +53,14 @@ if %errorlevel% neq 0 (
     timeout /t 1 /nobreak >nul
     goto :wait_loop
     :db_ready
+)
+
+REM Check if server\.env exists
+if not exist "server\.env" (
+    echo ERROR: server\.env file not found
+    echo Please copy server\.env.example to server\.env and configure it
+    pause
+    exit /b 1
 )
 
 REM Start backend in new window with environment variables
