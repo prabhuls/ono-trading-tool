@@ -69,21 +69,35 @@ cd tool-boilerplate
 
 ### 2. Run the Setup Script
 
-The easiest way to get started:
+The project includes a cross-platform setup script:
 
 ```bash
+# Unix/macOS
 ./setup.sh
+
+# Windows
+setup.bat
+
+# Python (cross-platform)
+python3 setup.py
 ```
 
 This script will:
-- Check prerequisites
+- Check prerequisites (Python 3.9+, Node.js 18+, Docker)
 - Set up Python virtual environment
 - Install all dependencies
-- Create environment files
-- Start Docker services
-- Create helper scripts
+- Create environment files from templates
+- Prompt for database setup preference
 
 ### 3. Configure Environment Variables
+
+The setup script creates environment files from templates. There are three different `.env` files:
+
+- **`.env`** (root) - Only for Docker Compose
+- **`server/.env`** - Backend configuration 
+- **`client/.env.local`** - Frontend configuration
+
+See [ENVIRONMENT_VARIABLES.md](./ENVIRONMENT_VARIABLES.md) for detailed documentation.
 
 #### Backend Configuration (server/.env)
 
@@ -121,13 +135,95 @@ NEXT_PUBLIC_ENVIRONMENT=development
 NEXT_PUBLIC_SENTRY_DSN=
 ```
 
+### 4. Validate Setup
+
+After setup, validate your environment:
+
+```bash
+python3 validate-setup.py
+```
+
+This checks:
+- Configuration files
+- Environment variables
+- Python packages (in virtual environment)
+- Node.js dependencies
+- Docker availability
+- Database connections
+- Running services
+
+### 5. Development Modes
+
+#### Hybrid Mode (Recommended)
+Database and Redis run in Docker, applications run natively with hot-reloading:
+
+```bash
+# Start services
+./start-dev.sh        # Unix/macOS
+start-dev.bat         # Windows
+
+# Stop services
+./stop-dev.sh         # Unix/macOS
+stop-dev.bat          # Windows
+```
+
+**Advantages:**
+- Fast hot-reloading for code changes
+- Easy debugging with native tools
+- Lower resource usage
+
+#### Full Docker Mode
+Everything runs in containers:
+
+```bash
+# Start all services
+docker-compose up
+
+# Run in background
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+**Advantages:**
+- Consistent environment
+- Closer to production setup
+- No need to install Python/Node locally
+
+#### Native Mode
+Run everything locally without Docker:
+
+```bash
+# Requires local PostgreSQL and Redis installation
+# Update DATABASE_URL and REDIS_URL in server/.env to point to local instances
+
+# Backend
+cd server && source venv/bin/activate && uvicorn app.main:app --reload
+
+# Frontend (in another terminal)
+cd client && npm run dev
+```
+
 ## Backend Development
 
 ### Starting the Backend
 
+#### Option 1: Using start-dev.sh (Recommended)
+The `start-dev.sh` script starts PostgreSQL/Redis in Docker and runs the backend natively.
+
+#### Option 2: Manual Start
 ```bash
 cd server
 source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Load environment variables
+export $(grep -v '^#' .env | xargs)  # Unix/macOS
+# On Windows, manually set variables or use python-dotenv
+
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -322,14 +418,15 @@ try {
 
 ### Using PostgreSQL Locally
 
-1. Start PostgreSQL with Docker:
+1. Start PostgreSQL with Docker (if not using start-dev.sh):
 ```bash
-docker-compose up -d postgres
+docker-compose up -d postgres redis
 ```
 
 2. Run migrations:
 ```bash
 cd server
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 alembic upgrade head
 ```
 
@@ -344,14 +441,20 @@ docker-compose exec postgres psql -U postgres -d trading_tools
 
 ### Creating Migrations
 
-1. Create a new migration:
+1. Activate virtual environment:
+```bash
+cd server
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+2. Create a new migration:
 ```bash
 alembic revision --autogenerate -m "Add new table"
 ```
 
-2. Review the generated migration in `alembic/versions/`
+3. Review the generated migration in `alembic/versions/`
 
-3. Apply the migration:
+4. Apply the migration:
 ```bash
 alembic upgrade head
 ```
@@ -535,14 +638,26 @@ redis-cli monitor
 
 ## Development Tips
 
-### 1. Use the Makefile (if available)
+### 1. Quick Commands
 
 ```bash
-cd server
-make install     # Install dependencies
-make run        # Run development server
-make test       # Run tests
-make lint       # Run linters
+# Validate setup
+python3 validate-setup.py
+
+# Start everything
+./start-dev.sh
+
+# Run backend only
+cd server && source venv/bin/activate && uvicorn app.main:app --reload
+
+# Run frontend only  
+cd client && npm run dev
+
+# Format Python code
+cd server && source venv/bin/activate && black . && ruff check --fix
+
+# Type check
+cd server && source venv/bin/activate && mypy .
 ```
 
 ### 2. Hot Reloading
@@ -577,7 +692,8 @@ Recommended extensions:
 
 ## Next Steps
 
-1. Review the [API Documentation](./API_DOCUMENTATION.md)
-2. Check the [Architecture Guide](./ARCHITECTURE.md)
-3. Read about [Deployment](./DEPLOYMENT.md)
-4. Learn about [Security Best Practices](./SECURITY.md)
+1. Review the [Environment Variables Guide](./ENVIRONMENT_VARIABLES.md)
+2. Check the [Backend Coding Standards](./BACKEND_CODING_STANDARDS.md)
+3. Review the [Frontend Coding Standards](./FRONTEND_CODING_STANDARDS.md)
+4. Read about [Railway Deployment](./RAILWAY_DEPLOYMENT.md)
+5. Understand the [Database Setup](./DATABASE_SETUP.md)
