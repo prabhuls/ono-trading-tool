@@ -58,6 +58,25 @@ This guide provides detailed instructions for setting up and running the Trading
   sudo apt-get install redis-tools
   ```
 
+## Quick Start
+
+```bash
+# 1. Clone and setup
+git clone <repository-url>
+cd tool-boilerplate
+python3 setup.py  # or ./setup.sh on Unix/macOS
+
+# 2. Configure environment variables
+# Edit server/.env and client/.env.local with your API keys
+
+# 3. Start development environment
+./start-dev.sh    # Unix/macOS
+start-dev.bat     # Windows
+
+# 4. Validate everything is working
+python3 validate-setup.py
+```
+
 ## Initial Setup
 
 ### 1. Clone the Repository
@@ -135,24 +154,7 @@ NEXT_PUBLIC_ENVIRONMENT=development
 NEXT_PUBLIC_SENTRY_DSN=
 ```
 
-### 4. Validate Setup
-
-After setup, validate your environment:
-
-```bash
-python3 validate-setup.py
-```
-
-This checks:
-- Configuration files
-- Environment variables
-- Python packages (in virtual environment)
-- Node.js dependencies
-- Docker availability
-- Database connections
-- Running services
-
-### 5. Development Modes
+### 4. Development Modes
 
 #### Hybrid Mode (Recommended)
 Database and Redis run in Docker, applications run natively with hot-reloading:
@@ -207,6 +209,25 @@ cd server && source venv/bin/activate && uvicorn app.main:app --reload
 # Frontend (in another terminal)
 cd client && npm run dev
 ```
+
+### 5. Validate Your Setup
+
+After starting your development environment, validate that everything is working:
+
+```bash
+python3 validate-setup.py
+```
+
+This checks:
+- Configuration files exist
+- Environment variables are set
+- Python packages installed (in virtual environment)
+- Node.js dependencies installed
+- Docker availability
+- Database connections
+- **Running services** (Backend API, Frontend, Redis)
+
+**Note:** Run this AFTER starting your development environment with `./start-dev.sh` or `docker-compose up`, as it checks if services are actually running.
 
 ## Backend Development
 
