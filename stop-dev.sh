@@ -1,16 +1,47 @@
 #!/bin/bash
 
-# Stop all services
+# Stop all services gracefully
 
 echo "Stopping all services..."
 
+# Read PIDs from files if they exist
+BACKEND_PID=""
+FRONTEND_PID=""
+
+if [ -f .backend.pid ]; then
+    BACKEND_PID=$(cat .backend.pid)
+    rm -f .backend.pid
+fi
+
+if [ -f .frontend.pid ]; then
+    FRONTEND_PID=$(cat .frontend.pid)
+    rm -f .frontend.pid
+fi
+
 # Stop backend
-pkill -f "uvicorn app.main:app"
+if [ -n "$BACKEND_PID" ] && kill -0 "$BACKEND_PID" 2>/dev/null; then
+    echo "Stopping backend (PID: $BACKEND_PID)..."
+    kill "$BACKEND_PID"
+else
+    echo "Backend not found via PID file, searching for process..."
+    # More specific pattern to avoid killing unrelated processes
+    pkill -f "uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
+fi
 
 # Stop frontend
-pkill -f "next dev"
+if [ -n "$FRONTEND_PID" ] && kill -0 "$FRONTEND_PID" 2>/dev/null; then
+    echo "Stopping frontend (PID: $FRONTEND_PID)..."
+    kill "$FRONTEND_PID"
+else
+    echo "Frontend not found via PID file, searching for process..."
+    # More specific pattern for Next.js dev server
+    pkill -f "next dev"
+fi
 
 # Stop Docker services
-docker compose down
+if docker compose ps --quiet postgres redis 2>/dev/null | grep -q .; then
+    echo "Stopping Docker services..."
+    docker compose stop postgres redis
+fi
 
 echo "All services stopped"

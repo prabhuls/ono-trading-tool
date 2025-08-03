@@ -1,0 +1,132 @@
+version: '3.8'
+
+# Development-optimized Docker Compose configuration
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  # Override backend for development
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      target: builder  # Stop at builder stage for development
+    volumes:
+      # Mount source code for hot reloading
+      - ./server/app:/app/app:rw
+      - ./server/alembic:/app/alembic:rw
+      - ./server/tests:/app/tests:rw
+      # Persist pip cache
+      - backend-pip-cache:/root/.cache/pip
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+      - RELOAD=true
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    
+  # Override frontend for development
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      target: builder  # Stop at builder stage for development
+    volumes:
+      # Mount source code for hot reloading
+      - ./client/app:/app/app:rw
+      - ./client/components:/app/components:rw
+      - ./client/lib:/app/lib:rw
+      - ./client/public:/app/public:rw
+      - ./client/styles:/app/styles:rw
+      # Mount config files
+      - ./client/next.config.ts:/app/next.config.ts:ro
+      - ./client/tsconfig.json:/app/tsconfig.json:ro
+      - ./client/tailwind.config.ts:/app/tailwind.config.ts:ro
+      # Persist node_modules
+      - frontend-node-modules:/app/node_modules
+      # Persist Next.js cache
+      - frontend-next-cache:/app/.next
+    environment:
+      - NODE_ENV=development
+      - WATCHPACK_POLLING=true  # Enable polling for file changes in Docker
+    command: ["npm", "run", "dev"]
+    
+  # PostgreSQL with development settings
+  postgres:
+    ports:
+      - "5432:5432"  # Expose PostgreSQL for external tools
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: trading_tools
+      # Development-friendly settings
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --data-checksums"
+    command: 
+      - "postgres"
+      - "-c"
+      - "log_statement=all"  # Log all SQL statements
+      - "-c"
+      - "log_duration=on"    # Log query duration
+      - "-c"
+      - "shared_preload_libraries=pg_stat_statements"
+      
+  # Redis with development settings
+  redis:
+    ports:
+      - "6379:6379"  # Expose Redis for external tools
+    command: 
+      - "redis-server"
+      - "--appendonly"
+      - "yes"
+      - "--loglevel"
+      - "debug"  # Verbose logging for development
+
+  # pgAdmin for PostgreSQL management (development only)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: trading-tools-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'  # Desktop mode
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - trading-tools-network
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    profiles:
+      - tools  # Only start when explicitly requested
+
+  # Redis Commander for Redis management (development only)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: trading-tools-redis-commander
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - trading-tools-network
+    profiles:
+      - tools  # Only start when explicitly requested
+
+volumes:
+  backend-pip-cache:
+    driver: local
+  frontend-node-modules:
+    driver: local
+  frontend-next-cache:
+    driver: local
+  pgadmin-data:
+    driver: local
+
+# Development notes:
+# 1. To start with development tools: docker-compose --profile tools -f docker-compose.yml -f docker-compose.dev.yml up
+# 2. pgAdmin available at: http://localhost:5050
+# 3. Redis Commander available at: http://localhost:8081
+# 4. Hot reloading enabled for both backend and frontend
+# 5. All services expose ports for external tool access

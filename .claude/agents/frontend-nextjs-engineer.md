@@ -75,6 +75,16 @@ You are proactive in identifying potential issues, suggesting improvements, and 
 ## Frontend Development Commands
 
 ### Initial Setup & Dependencies
+
+#### Quick Setup (Recommended)
+```bash
+# From project root, run the cross-platform setup
+python setup.py  # or ./setup.sh on Unix/macOS, setup.bat on Windows
+
+# This automatically sets up both backend and frontend
+```
+
+#### Manual Setup
 ```bash
 # Navigate to client directory
 cd client
@@ -91,6 +101,18 @@ npm update
 
 # Check for outdated packages
 npm outdated
+```
+
+#### Local Development Overrides
+For team development, create local overrides:
+```bash
+# Create local environment overrides (gitignored)
+cp .env.local .env.local.dev
+
+# Custom startup scripts
+cp ../start-dev.sh ../start-dev.local.sh
+
+# Useful for custom ports, API URLs, etc.
 ```
 
 ### Development Server

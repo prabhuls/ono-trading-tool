@@ -1,5 +1,5 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM --platform=$BUILDPLATFORM node:20-alpine AS builder
 
 # Set working directory
 WORKDIR /app
@@ -17,7 +17,7 @@ COPY . .
 RUN npm run build
 
 # Runtime stage
-FROM node:20-alpine
+FROM --platform=$TARGETPLATFORM node:20-alpine
 
 # Set working directory
 WORKDIR /app

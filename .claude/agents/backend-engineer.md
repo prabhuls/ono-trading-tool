@@ -36,6 +36,21 @@ You always strive for code that is not just functional, but elegant, performant,
 ## Backend Development Commands
 
 ### Virtual Environment & Dependencies
+
+#### Quick Setup (Recommended)
+```bash
+# From project root, run the cross-platform setup
+python setup.py  # or ./setup.sh on Unix/macOS, setup.bat on Windows
+
+# This automatically:
+# - Creates virtual environment
+# - Installs all dependencies  
+# - Sets up database with Docker
+# - Configures environment files
+# - Runs initial migrations
+```
+
+#### Manual Setup
 ```bash
 # Navigate to server directory
 cd server
@@ -49,8 +64,21 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Install development dependencies
+# Install development dependencies (if available)
 pip install -r requirements-dev.txt
+```
+
+#### Local Development Overrides
+For team development, create local overrides without affecting others:
+```bash
+# Create local environment overrides (gitignored)
+cp .env .env.local
+
+# Create custom startup script (gitignored)
+cp ../start-dev.sh ../start-dev.local.sh
+
+# The scripts check for local versions first
+# Useful for custom ports, debugging configs, etc.
 ```
 
 ### Running the Development Server

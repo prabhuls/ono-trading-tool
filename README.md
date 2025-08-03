@@ -28,29 +28,39 @@ A production-ready boilerplate for building trading and investment tools with Fa
 ### DevOps & Deployment
 - **Docker** containerization for all services
 - **Railway-ready** deployment configurations
-- **One-command setup** script
+- **Cross-platform setup** scripts (Windows, macOS, Linux)
 - **Environment management** with examples
 - **CI/CD ready** structure
+- **Multi-architecture** Docker support (x86_64, ARM64)
 
 ## 📋 Prerequisites
 
-- Python 3.9+
-- Node.js 18+
-- Docker & Docker Compose
-- PostgreSQL (included in Docker setup)
-- Redis (included in Docker setup)
+- Python 3.9+ (3.11 recommended)
+- Node.js 18+ (LTS recommended)
+- Docker & Docker Compose (for database services)
+- Git
+
+Optional:
+- PostgreSQL (if not using Docker)
+- Redis (if not using Docker)
 
 ## 🛠️ Quick Start
 
-### One-Command Setup
+### Cross-Platform Setup
 
 ```bash
 # Clone the repository
 git clone <your-repo-url>
 cd tool-boilerplate
 
-# Run the setup script
+# Unix/Linux/macOS
 ./setup.sh
+
+# Windows
+setup.bat  # or setup.ps1 for PowerShell
+
+# Universal (Python-based)
+python setup.py  # or python3 setup.py
 ```
 
 This will:
@@ -58,8 +68,33 @@ This will:
 2. Create Python virtual environment
 3. Install all dependencies
 4. Set up environment files
-5. Start Docker services
-6. Create development scripts
+5. Start Docker services (PostgreSQL & Redis)
+6. Run database migrations
+7. Create development scripts
+
+### Development Modes
+
+After setup, you can choose from three development modes:
+
+#### 1. Hybrid Mode (Recommended)
+Database/Redis in Docker, applications run natively for hot-reloading:
+```bash
+./start-dev.sh    # Unix/macOS
+start-dev.bat     # Windows
+```
+
+#### 2. Full Docker Mode
+Everything runs in containers:
+```bash
+docker-compose up
+```
+
+#### 3. Full Native Mode
+Everything runs locally (requires local PostgreSQL/Redis):
+```bash
+# Configure local database in server/.env
+./start-dev.sh    # Will use local services
+```
 
 ### Manual Setup
 
@@ -96,6 +131,49 @@ uvicorn app.main:app --reload
 
 # Start frontend (in client directory)
 npm run dev
+```
+
+## 👥 Team Development
+
+### Local Development Overrides
+
+When working in a team, developers can customize their local environment without affecting others:
+
+```bash
+# Create local override scripts (gitignored)
+cp start-dev.sh start-dev.local.sh    # Unix/macOS
+copy start-dev.bat start-dev.local.bat # Windows
+
+# Local environment overrides
+server/.env.local     # Backend overrides
+client/.env.local.dev # Frontend overrides
+```
+
+The scripts automatically check for local versions first, allowing you to:
+- Use different ports
+- Connect to local databases
+- Add debugging configurations
+- Customize for your OS/setup
+
+See [docs/LOCAL_OVERRIDES.md](docs/LOCAL_OVERRIDES.md) for detailed examples.
+
+### Working with the Boilerplate
+
+For new trading tools:
+1. **Fork or use as template** - Don't clone directly
+2. **Customize for your tool** - Update configs and branding
+3. **Keep boilerplate updates** - Merge upstream changes when needed
+
+```bash
+# Set up for a new tool
+git clone https://github.com/FinMC/trading-tools-boilerplate my-scanner
+cd my-scanner
+git remote add boilerplate https://github.com/MyTeam/trading-tools-boilerplate
+git remote set-url origin https://github.com/MyTeam/my-scanner
+
+# Get boilerplate updates later
+git fetch boilerplate
+git merge boilerplate/main
 ```
 
 ## 🔧 Configuration
@@ -142,15 +220,36 @@ tool-boilerplate/
 │   │   └── main.py        # FastAPI app
 │   ├── alembic/           # Database migrations
 │   ├── requirements.txt
-│   └── Dockerfile
+│   ├── Dockerfile
+│   └── railway.json       # Railway deployment config
 ├── client/                 # Next.js frontend
 │   ├── app/               # App router
 │   ├── components/        # React components
 │   ├── lib/               # Utilities
 │   ├── package.json
-│   └── Dockerfile
-├── docker-compose.yml
-├── setup.sh               # One-command setup
+│   ├── Dockerfile
+│   └── railway.json       # Railway deployment config
+├── docs/                   # Documentation
+│   ├── BACKEND_CODING_STANDARDS.md
+│   ├── FRONTEND_CODING_STANDARDS.md
+│   ├── LOCAL_DEVELOPMENT.md
+│   ├── LOCAL_OVERRIDES.md
+│   ├── RAILWAY_DEPLOYMENT.md
+│   ├── WINDOWS_SETUP.md
+│   └── CROSS_PLATFORM_SETUP.md
+├── docker-compose.yml      # Development services
+├── docker-compose.dev.yml  # Development overrides
+├── setup.sh               # Unix/macOS setup
+├── setup.bat             # Windows setup
+├── setup.ps1             # PowerShell setup
+├── setup.py              # Universal Python setup
+├── start-dev.sh          # Unix/macOS dev starter
+├── start-dev.bat         # Windows dev starter
+├── stop-dev.sh           # Unix/macOS dev stopper
+├── stop-dev.bat          # Windows dev stopper
+├── validate-setup.py     # Setup validation
+├── .python-version       # Python version lock
+├── CLAUDE.md            # AI assistant instructions
 └── README.md
 ```
 
@@ -292,25 +391,54 @@ cd client
 npm test
 ```
 
-## 🤝 Contributing
+## 🔍 Validation & Troubleshooting
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+### Validate Your Setup
 
-## 📄 License
+```bash
+# Run validation script
+python validate-setup.py  # or python3 validate-setup.py
+```
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This checks:
+- All dependencies installed correctly
+- Environment files configured
+- Database connections working
+- Services can start properly
+
+### Common Issues
+
+#### Port Conflicts
+```bash
+# Check what's using ports
+lsof -i :3000  # macOS/Linux
+netstat -ano | findstr :3000  # Windows
+
+# Use different ports via local overrides
+# See docs/LOCAL_OVERRIDES.md
+```
+
+#### Module Not Found (Frontend)
+```bash
+# Reinstall dependencies
+cd client
+rm -rf node_modules package-lock.json
+npm install
+```
+
+#### Database Connection Failed
+- Ensure Docker is running
+- Check `DATABASE_URL` in `server/.env`
+- Verify PostgreSQL container is healthy: `docker-compose ps`
+
+### Platform-Specific Guides
+- [Windows Setup Guide](docs/WINDOWS_SETUP.md)
+- [Cross-Platform Setup](docs/CROSS_PLATFORM_SETUP.md)
+- [Local Development](docs/LOCAL_DEVELOPMENT.md)
 
 ## 🆘 Support
 
 For issues and questions:
-- Check the [Issues](https://github.com/yourusername/tool-boilerplate/issues) page
-- Review the documentation in the `docs/` directory
-- Contact the maintainers
+- Contact the maintainers (Wares)
 
 ---
-
-Built with ❤️ for the trading and investment community

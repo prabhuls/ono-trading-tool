@@ -1,5 +1,5 @@
 # Build stage
-FROM python:3.11-slim as builder
+FROM --platform=$BUILDPLATFORM python:3.11-slim as builder
 
 # Set working directory
 WORKDIR /app
@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Runtime stage
-FROM python:3.11-slim
+FROM --platform=$TARGETPLATFORM python:3.11-slim
 
 # Set working directory
 WORKDIR /app

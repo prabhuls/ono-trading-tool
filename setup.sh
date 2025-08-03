@@ -321,57 +321,172 @@ create_start_scripts() {
     cat > start-dev.sh << 'EOF'
 #!/bin/bash
 
-# Start all services for development
+# Trading Tools Development Environment Startup Script
+# Default mode: Hybrid (Database in Docker, Apps native for hot-reloading)
+# For full Docker mode, use: docker-compose up
 
-echo "Starting Trading Tools development environment..."
+# Check for local override script
+if [ -f "start-dev.local.sh" ]; then
+    echo "Using local override script: start-dev.local.sh"
+    exec ./start-dev.local.sh "$@"
+fi
 
-# Start Docker services
-docker compose up -d postgres redis
+set -e
 
-# Start backend
-cd server
-source venv/bin/activate
-# Export environment variables from .env file
-export $(grep -v '^#' .env | xargs)
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 &
-BACKEND_PID=$!
-cd ..
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
 
-# Start frontend
-cd client
-npm run dev &
-FRONTEND_PID=$!
-cd ..
+# Parse command line arguments
+USE_DOCKER=false
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --docker)
+            USE_DOCKER=true
+            shift
+            ;;
+        --help)
+            echo "Usage: ./start-dev.sh [options]"
+            echo ""
+            echo "Options:"
+            echo "  --docker    Use full Docker mode (all services in containers)"
+            echo "  --help      Show this help message"
+            echo ""
+            echo "Default: Hybrid mode (PostgreSQL/Redis in Docker, apps run natively)"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
 
-echo ""
-echo "Services started:"
-echo "  Backend:  http://localhost:8000"
-echo "  Frontend: http://localhost:3000"
-echo "  API Docs: http://localhost:8000/docs"
-echo ""
-echo "Press Ctrl+C to stop all services"
-
-# Wait for interrupt
-trap "kill $BACKEND_PID $FRONTEND_PID; docker compose down; exit" INT
-wait
+if [ "$USE_DOCKER" = true ]; then
+    echo -e "${BLUE}Starting in Full Docker mode...${NC}"
+    echo "All services will run in containers"
+    echo ""
+    
+    # Start all services with Docker Compose
+    docker-compose up
+else
+    echo -e "${BLUE}Starting in Hybrid mode...${NC}"
+    echo "Database/Cache in Docker, Apps run natively for hot-reloading"
+    echo ""
+    
+    # Check if Docker is running
+    if ! docker info >/dev/null 2>&1; then
+        echo -e "${YELLOW}Docker is not running. Please start Docker Desktop first.${NC}"
+        exit 1
+    fi
+    
+    # Start Docker services (PostgreSQL and Redis only)
+    echo "Starting PostgreSQL and Redis..."
+    docker compose up -d postgres redis
+    
+    # Wait for services to be ready
+    echo "Waiting for database..."
+    for i in {1..30}; do
+        if docker compose exec -T postgres pg_isready -U postgres >/dev/null 2>&1; then
+            echo -e "${GREEN}✓ PostgreSQL is ready${NC}"
+            break
+        fi
+        if [ $i -eq 30 ]; then
+            echo "PostgreSQL failed to start"
+            exit 1
+        fi
+        sleep 1
+    done
+    
+    # Start backend
+    echo "Starting backend server..."
+    cd server
+    source venv/bin/activate
+    # Export environment variables from .env file
+    if [ -f .env ]; then
+    set -a
+    source .env
+    set +a
+else
+    print_error ".env file not found"
+    exit 1
+fi
+    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 &
+    BACKEND_PID=$!
+    cd ..
+    
+    # Start frontend
+    echo "Starting frontend server..."
+    cd client
+    npm run dev &
+    FRONTEND_PID=$!
+    cd ..
+    
+    echo ""
+    echo -e "${GREEN}Services started successfully!${NC}"
+    echo ""
+    echo "  Backend:  http://localhost:8000"
+    echo "  Frontend: http://localhost:3000"
+    echo "  API Docs: http://localhost:8000/docs"
+    echo ""
+    echo "Press Ctrl+C to stop all services"
+    
+    # Wait for interrupt
+    trap "echo 'Stopping services...'; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; docker compose stop postgres redis; exit" INT
+    wait
+fi
 EOF
 
     # Create stop-dev.sh
     cat > stop-dev.sh << 'EOF'
 #!/bin/bash
 
-# Stop all services
+# Stop all services gracefully
 
 echo "Stopping all services..."
 
+# Read PIDs from files if they exist
+BACKEND_PID=""
+FRONTEND_PID=""
+
+if [ -f .backend.pid ]; then
+    BACKEND_PID=$(cat .backend.pid)
+    rm -f .backend.pid
+fi
+
+if [ -f .frontend.pid ]; then
+    FRONTEND_PID=$(cat .frontend.pid)
+    rm -f .frontend.pid
+fi
+
 # Stop backend
-pkill -f "uvicorn app.main:app"
+if [ -n "$BACKEND_PID" ] && kill -0 "$BACKEND_PID" 2>/dev/null; then
+    echo "Stopping backend (PID: $BACKEND_PID)..."
+    kill "$BACKEND_PID"
+else
+    echo "Backend not found via PID file, searching for process..."
+    # More specific pattern to avoid killing unrelated processes
+    pkill -f "uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
+fi
 
 # Stop frontend
-pkill -f "next dev"
+if [ -n "$FRONTEND_PID" ] && kill -0 "$FRONTEND_PID" 2>/dev/null; then
+    echo "Stopping frontend (PID: $FRONTEND_PID)..."
+    kill "$FRONTEND_PID"
+else
+    echo "Frontend not found via PID file, searching for process..."
+    # More specific pattern for Next.js dev server
+    pkill -f "next dev"
+fi
 
 # Stop Docker services
-docker compose down
+if docker compose ps --quiet postgres redis 2>/dev/null | grep -q .; then
+    echo "Stopping Docker services..."
+    docker compose stop postgres redis
+fi
 
 echo "All services stopped"
 EOF
@@ -395,8 +510,19 @@ print_next_steps() {
     echo "   - server/.env"
     echo "   - client/.env.local"
     echo ""
-    echo "2. Start the development environment:"
+    echo "2. Choose your development mode:"
+    echo ""
+    echo "   ${BLUE}Option A - Hybrid Mode (Recommended)${NC}"
+    echo "   Database/Redis in Docker, apps run natively with hot-reloading:"
     echo "   ./start-dev.sh"
+    echo ""
+    echo "   ${BLUE}Option B - Full Docker Mode${NC}"
+    echo "   Everything runs in containers:"
+    echo "   docker-compose up"
+    echo ""
+    echo "   ${BLUE}Option C - Full Native Mode${NC}"
+    echo "   Run PostgreSQL/Redis locally, then:"
+    echo "   ./start-dev.sh  (it will skip Docker and use local services)"
     echo ""
     echo "3. Access the applications:"
     echo "   - Frontend: http://localhost:3000"
@@ -404,7 +530,8 @@ print_next_steps() {
     echo "   - API Documentation: http://localhost:8000/docs"
     echo ""
     echo "4. To stop all services:"
-    echo "   ./stop-dev.sh"
+    echo "   ./stop-dev.sh  (for hybrid mode)"
+    echo "   Ctrl+C then 'docker-compose down' (for Docker mode)"
     echo ""
     echo -e "${YELLOW}Remember to configure your API keys before starting!${NC}"
     echo ""
@@ -443,7 +570,14 @@ verify_setup() {
     # Check if backend can start
     cd server
     source venv/bin/activate
-    export $(grep -v '^#' .env | xargs)
+    if [ -f .env ]; then
+    set -a
+    source .env
+    set +a
+else
+    print_error ".env file not found"
+    exit 1
+fi
     
     print_info "Testing backend startup..."
     python -c "
