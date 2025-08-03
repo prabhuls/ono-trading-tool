@@ -2,7 +2,7 @@
 
 import React from "react";
 import * as Sentry from "@sentry/nextjs";
-import { ErrorMonitoring } from "@/lib/monitoring";
+import { captureException, addBreadcrumb } from "@/lib/monitoring";
 
 interface Props {
   children: React.ReactNode;
@@ -35,7 +35,7 @@ const DefaultErrorFallback: React.FC<{
             Oops! Something went wrong
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            We're sorry for the inconvenience. The error has been reported to our team.
+            We&apos;re sorry for the inconvenience. The error has been reported to our team.
           </p>
         </div>
         
@@ -119,7 +119,7 @@ class ErrorBoundary extends React.Component<Props, State> {
     });
     
     // Also log with our monitoring
-    ErrorMonitoring.captureException(error, {
+    captureException(error, {
       errorBoundary: true,
       componentStack: errorInfo.componentStack,
     });
@@ -146,7 +146,7 @@ class ErrorBoundary extends React.Component<Props, State> {
 
   resetError = () => {
     // Add breadcrumb for error recovery
-    ErrorMonitoring.addBreadcrumb({
+    addBreadcrumb({
       message: "Error boundary reset",
       category: "ui.error_boundary",
       level: "info",

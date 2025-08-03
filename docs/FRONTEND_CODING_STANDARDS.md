@@ -861,13 +861,10 @@ export class ErrorBoundary extends Component<
    Sentry.init({
      dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
      environment: process.env.NODE_ENV,
-     integrations: [
-       new Sentry.BrowserTracing(),
-       new Sentry.Replay()
-     ],
-     tracesSampleRate: 0.1,
-     replaysSessionSampleRate: 0.1,
-     replaysOnErrorSampleRate: 1.0,
+     // Performance monitoring disabled - error tracking only
+     tracesSampleRate: 0,
+     // Only enabled in production
+     enabled: process.env.NODE_ENV === "production",
    });
    ```
 
@@ -1117,49 +1114,39 @@ const Chart = dynamic(() => import('react-chartjs-2'), {
 });
 ```
 
-### Performance Monitoring with Sentry
+### Using the Monitoring Utilities
 
-1. **Monitor page load performance**:
-   ```typescript
-   // In page components
-   useEffect(() => {
-     const transaction = Sentry.startTransaction({
-       op: 'navigation',
-       name: `Page: ${pageName}`,
-     });
-     
-     // Set transaction on scope so all events are tied to it
-     Sentry.getCurrentHub().configureScope(scope => scope.setSpan(transaction));
-     
-     return () => {
-       transaction.finish();
-     };
-   }, []);
-   ```
+Use the simplified monitoring utilities from `lib/monitoring.ts`:
 
-2. **Monitor API calls**:
-   ```typescript
-   async function fetchData(endpoint: string) {
-     const span = Sentry.getCurrentHub()
-       .getScope()
-       ?.getSpan()
-       ?.startChild({
-         op: 'http.client',
-         description: `GET ${endpoint}`,
-       });
-     
-     try {
-       const response = await fetch(endpoint);
-       span?.setStatus('ok');
-       return response.json();
-     } catch (error) {
-       span?.setStatus('internal_error');
-       throw error;
-     } finally {
-       span?.finish();
-     }
-   }
-   ```
+```typescript
+import { captureException, captureMessage, addBreadcrumb, handleApiError } from '@/lib/monitoring';
+
+// Capture exceptions with context
+try {
+  await riskyOperation();
+} catch (error) {
+  captureException(error, {
+    component: 'PaymentForm',
+    action: 'processPayment',
+    userId: user.id
+  });
+}
+
+// Handle API errors
+try {
+  const response = await api.post('/payment', data);
+} catch (error) {
+  const { message, statusCode } = handleApiError(error);
+  setError(message);
+}
+
+// Add breadcrumbs for debugging
+addBreadcrumb({
+  message: 'User clicked checkout',
+  category: 'ui.click',
+  data: { productId: product.id }
+});
+```
 
 3. **Monitor component render performance**:
    ```typescript
@@ -1275,7 +1262,7 @@ Before submitting code for review, ensure:
 - [ ] Sentry error capture added for try-catch blocks
 - [ ] User context set for Sentry after authentication
 - [ ] No sensitive data sent to Sentry
-- [ ] Performance monitoring added for slow operations
+- [ ] Error handling uses monitoring utilities from lib/monitoring.ts
 - [ ] Accessibility attributes included
 - [ ] Responsive design implemented
 - [ ] Code is properly formatted (Prettier)

@@ -1,22 +1,22 @@
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from "axios";
-import { ErrorMonitoring, handleApiError } from "./monitoring";
+import { captureException, handleApiError, setUser, addBreadcrumb } from "./monitoring";
 
 // Types
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   message: string;
   data?: T;
   error?: {
     code: string;
     message: string;
-    details?: any;
+    details?: Record<string, unknown>;
   };
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   request_id?: string;
   timestamp: string;
 }
 
-export interface PaginatedResponse<T = any> extends ApiResponse<T[]> {
+export interface PaginatedResponse<T = unknown> extends ApiResponse<T[]> {
   pagination: {
     total: number;
     page: number;
@@ -24,6 +24,15 @@ export interface PaginatedResponse<T = any> extends ApiResponse<T[]> {
     total_pages: number;
     has_next: boolean;
     has_prev: boolean;
+  };
+}
+
+// Error type for standardized errors
+export interface StandardizedError extends Error {
+  standardizedError?: {
+    message: string;
+    statusCode: number;
+    error: unknown;
   };
 }
 
@@ -50,7 +59,7 @@ apiClient.interceptors.request.use(
     config.headers["X-Request-ID"] = requestId;
     
     // Log request
-    ErrorMonitoring.addBreadcrumb({
+    addBreadcrumb({
       message: `API Request: ${config.method?.toUpperCase()} ${config.url}`,
       category: "api.request",
       level: "info",
@@ -65,7 +74,7 @@ apiClient.interceptors.request.use(
     return config;
   },
   (error) => {
-    ErrorMonitoring.captureException(error, {
+    captureException(error, {
       context: "api.request.interceptor",
     });
     return Promise.reject(error);
@@ -76,7 +85,7 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => {
     // Log successful response
-    ErrorMonitoring.addBreadcrumb({
+    addBreadcrumb({
       message: `API Response: ${response.status} ${response.config.url}`,
       category: "api.response",
       level: "info",
@@ -123,7 +132,7 @@ function getAuthToken(): string | null {
 function clearAuthToken(): void {
   if (typeof window !== "undefined") {
     localStorage.removeItem("auth_token");
-    ErrorMonitoring.clearUser();
+    setUser(null);
   }
 }
 
@@ -133,76 +142,81 @@ function generateRequestId(): string {
 
 // API client wrapper with better error handling
 export class ApiClient {
-  static async get<T = any>(
+  static async get<T = unknown>(
     url: string,
     config?: AxiosRequestConfig
   ): Promise<ApiResponse<T>> {
     try {
       const response = await apiClient.get<ApiResponse<T>>(url, config);
       return response.data;
-    } catch (error: any) {
-      throw error.standardizedError || error;
+    } catch (error) {
+      const standardizedError = error as StandardizedError;
+      throw standardizedError.standardizedError || error;
     }
   }
   
-  static async post<T = any>(
+  static async post<T = unknown>(
     url: string,
-    data?: any,
+    data?: unknown,
     config?: AxiosRequestConfig
   ): Promise<ApiResponse<T>> {
     try {
       const response = await apiClient.post<ApiResponse<T>>(url, data, config);
       return response.data;
-    } catch (error: any) {
-      throw error.standardizedError || error;
+    } catch (error) {
+      const standardizedError = error as StandardizedError;
+      throw standardizedError.standardizedError || error;
     }
   }
   
-  static async put<T = any>(
+  static async put<T = unknown>(
     url: string,
-    data?: any,
+    data?: unknown,
     config?: AxiosRequestConfig
   ): Promise<ApiResponse<T>> {
     try {
       const response = await apiClient.put<ApiResponse<T>>(url, data, config);
       return response.data;
-    } catch (error: any) {
-      throw error.standardizedError || error;
+    } catch (error) {
+      const standardizedError = error as StandardizedError;
+      throw standardizedError.standardizedError || error;
     }
   }
   
-  static async patch<T = any>(
+  static async patch<T = unknown>(
     url: string,
-    data?: any,
+    data?: unknown,
     config?: AxiosRequestConfig
   ): Promise<ApiResponse<T>> {
     try {
       const response = await apiClient.patch<ApiResponse<T>>(url, data, config);
       return response.data;
-    } catch (error: any) {
-      throw error.standardizedError || error;
+    } catch (error) {
+      const standardizedError = error as StandardizedError;
+      throw standardizedError.standardizedError || error;
     }
   }
   
-  static async delete<T = any>(
+  static async delete<T = unknown>(
     url: string,
     config?: AxiosRequestConfig
   ): Promise<ApiResponse<T>> {
     try {
       const response = await apiClient.delete<ApiResponse<T>>(url, config);
       return response.data;
-    } catch (error: any) {
-      throw error.standardizedError || error;
+    } catch (error) {
+      const standardizedError = error as StandardizedError;
+      throw standardizedError.standardizedError || error;
     }
   }
   
   // Paginated request helper
-  static async getPaginated<T = any>(
+  static async getPaginated<T = unknown>(
     url: string,
     params?: {
       page?: number;
       page_size?: number;
-      [key: string]: any;
+      [key: string]: string | number | boolean | undefined;
     }
   ): Promise<PaginatedResponse<T>> {
     const defaultParams = {
@@ -216,8 +230,9 @@ export class ApiClient {
         params: defaultParams,
       });
       return response.data;
-    } catch (error: any) {
-      throw error.standardizedError || error;
+    } catch (error) {
+      const standardizedError = error as StandardizedError;
+      throw standardizedError.standardizedError || error;
     }
   }
   
@@ -251,8 +266,8 @@ export const api = {
     list: (params?: { page?: number; page_size?: number; search?: string }) =>
       ApiClient.getPaginated("/api/v1/example/items", params),
     get: (id: string) => ApiClient.get(`/api/v1/example/items/${id}`),
-    create: (data: any) => ApiClient.post("/api/v1/example/items", data),
-    update: (id: string, data: any) => ApiClient.put(`/api/v1/example/items/${id}`, data),
+    create: (data: unknown) => ApiClient.post("/api/v1/example/items", data),
+    update: (id: string, data: unknown) => ApiClient.put(`/api/v1/example/items/${id}`, data),
     delete: (id: string) => ApiClient.delete(`/api/v1/example/items/${id}`),
   },
   

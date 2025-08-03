@@ -3,6 +3,7 @@ import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  output: 'standalone',
   
   // Environment variables that should be available on the client
   env: {
@@ -42,16 +43,48 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  
+  // Webpack configuration
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      // Ignore harmless warnings from OpenTelemetry
+      config.ignoreWarnings = [
+        {
+          module: /@opentelemetry\/instrumentation/,
+          message: /Critical dependency: the request of a dependency is an expression/,
+        },
+        {
+          module: /@prisma\/instrumentation/,
+          message: /Critical dependency: the request of a dependency is an expression/,
+        },
+      ];
+    }
+    return config;
+  },
 };
 
-// Wrap with Sentry config in production
+// Minimal Sentry configuration
 const sentryWebpackPluginOptions = {
   silent: true,
-  org: process.env.SENTRY_ORG,
-  project: process.env.SENTRY_PROJECT,
-  authToken: process.env.SENTRY_AUTH_TOKEN,
+  
+  // Disable source maps completely for simplicity
+  sourcemaps: {
+    disable: true,
+  },
+  
+  // Disable all optional features
+  widenClientFileUpload: false,
+  hideSourceMaps: true,
+  disableLogger: true,
 };
 
-export default process.env.NODE_ENV === "production" 
+// Export without Sentry wrapping in development or when no auth token
+const shouldUseSentry = 
+  process.env.NODE_ENV === "production" && 
+  process.env.SENTRY_AUTH_TOKEN && 
+  process.env.SENTRY_AUTH_TOKEN !== '' &&
+  process.env.SENTRY_AUTH_TOKEN !== 'your-auth-token';
+
+export default shouldUseSentry 
   ? withSentryConfig(nextConfig, sentryWebpackPluginOptions)
   : nextConfig;

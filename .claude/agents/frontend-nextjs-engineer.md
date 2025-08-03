@@ -476,26 +476,34 @@ export function LoginForm() {
 }
 ```
 
-## Sentry Error Monitoring
+## Sentry Error Monitoring (Simplified)
 
 ### Configuration Files
 
-The project includes pre-configured Sentry files:
-- `sentry.client.config.ts` - Client-side configuration
-- `sentry.server.config.ts` - Server-side configuration
-- `sentry.edge.config.ts` - Edge runtime configuration
-- `next.config.ts` - Includes Sentry webpack plugin
+The project includes pre-configured Sentry files for error tracking only:
+- `sentry.client.config.ts` - Client-side configuration (errors only)
+- `sentry.server.config.ts` - Server-side configuration (errors only)
+- `sentry.edge.config.ts` - Edge runtime configuration (errors only)
+- `instrumentation.ts` - Loads Sentry configurations for Next.js
+- `next.config.ts` - Includes Sentry webpack plugin (source maps disabled)
+- `lib/monitoring.ts` - Simplified error monitoring utilities
 
 ### Environment Variables
 ```bash
-# .env.local
+# .env.local or .env
 NEXT_PUBLIC_SENTRY_DSN=https://your-key@sentry.io/your-project-id
 
-# For source map upload (production builds)
+# Optional - only needed if you want source maps (not recommended for simplicity)
 SENTRY_ORG=your-org
 SENTRY_PROJECT=your-project
 SENTRY_AUTH_TOKEN=your-auth-token
 ```
+
+### Key Configuration
+- **Performance monitoring disabled**: `tracesSampleRate: 0`
+- **Production only**: `enabled: process.env.NODE_ENV === "production"`
+- **No session replay**: Removed for simplicity
+- **Standalone output**: Next.js configured for optimized Docker builds
 
 ### Using Sentry in Components
 

@@ -97,6 +97,8 @@ def check_node_version() -> bool:
 
 def check_docker() -> bool:
     """Check if Docker is installed and running"""
+    platform_info = get_platform_info()
+    
     if not check_command('docker'):
         print_colored("⚠ Docker not found (optional for containerized setup)", Colors.YELLOW)
         return False
@@ -107,6 +109,14 @@ def check_docker() -> bool:
         return True
     else:
         print_colored("⚠ Docker is installed but not running (optional)", Colors.YELLOW)
+        if platform_info['is_windows']:
+            print_colored("  On Windows, ensure Docker Desktop is running", Colors.YELLOW)
+            print_colored("  You may need Administrator privileges", Colors.YELLOW)
+        elif platform_info['is_linux']:
+            print_colored("  On Linux, ensure Docker daemon is running", Colors.YELLOW)
+            print_colored("  You may need to use 'sudo' or add your user to the docker group", Colors.YELLOW)
+        elif platform_info['is_mac']:
+            print_colored("  On macOS, ensure Docker Desktop is running", Colors.YELLOW)
         return False
 
 def setup_python_venv(platform_info: dict) -> bool:
@@ -239,6 +249,10 @@ def print_next_steps(platform_info: dict, docker_available: bool, db_choice: str
         
         print("\n   Option B - Full Docker Mode")
         print("   Everything runs in containers:")
+        if platform_info['is_windows']:
+            print_colored("   # Run as Administrator if you get permission errors", Colors.YELLOW)
+        elif platform_info['is_linux'] or platform_info['is_mac']:
+            print_colored("   # Use 'sudo docker-compose up' if you get permission errors", Colors.YELLOW)
         print("   docker-compose up")
         
     elif db_choice == '2':

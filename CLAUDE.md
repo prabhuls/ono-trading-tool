@@ -6,8 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a Trading Tools Boilerplate project with:
 - **Backend**: FastAPI (Python) with async PostgreSQL, Redis caching, and structured logging
-- **Frontend**: Next.js 15 (TypeScript) with Tailwind CSS and Sentry monitoring
+- **Frontend**: Next.js 15 (TypeScript) with Tailwind CSS and simplified Sentry error monitoring
 - **Infrastructure**: Docker Compose for local development, Railway-ready for deployment
+- **Cross-platform**: Universal setup script (setup.py) supports Windows, macOS, and Linux
 
 ## Quick Start
 
@@ -39,6 +40,8 @@ The project follows a **layered architecture** with clear separation of concerns
 - **Component Architecture**: Reusable components with proper typing
 - **State Management**: React hooks and context for state
 - **API Integration**: Axios client with interceptors
+- **Production Build**: Standalone output mode for optimized Docker deployment
+- **Error Monitoring**: Simplified Sentry integration (error tracking only, no performance monitoring)
 
 ## Available Subagents
 

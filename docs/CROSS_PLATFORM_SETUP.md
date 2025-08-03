@@ -21,10 +21,11 @@ We provide a Python-based setup script that works across all platforms:
 
 ```bash
 # Unix/Linux/macOS
-sudo python3 setup.py
+python3 setup.py  # or ./setup.sh
+# Note: May need 'sudo' for Docker operations
 
-# Windows (make sure to run powershell as administrator when running this)
-python setup.py
+# Windows
+python setup.py  # Run as Administrator if using Docker
 ```
 
 This script automatically:

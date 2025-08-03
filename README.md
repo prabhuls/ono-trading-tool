@@ -21,9 +21,10 @@ A production-ready boilerplate for building trading and investment tools with Fa
 - **Tailwind CSS** for styling
 - **Error boundaries** with Sentry integration
 - **API client** with interceptors and error handling
-- **Performance monitoring** and session replay
+- **Simplified error monitoring** (performance monitoring disabled)
 - **Responsive design** foundation
 - **Environment-based configuration**
+- **Standalone production builds** for optimized Docker deployment
 
 ### DevOps & Deployment
 - **Docker** containerization for all services
@@ -351,13 +352,13 @@ docker-compose down
 
 ### Sentry Integration
 
-Both frontend and backend are integrated with Sentry for error tracking:
+Both frontend and backend are integrated with Sentry for error tracking only:
 
 - Automatic error capture
-- Performance monitoring
 - User context tracking
 - Custom breadcrumbs
-- Session replay (frontend)
+- Production-only error reporting
+- Simplified configuration (no performance monitoring)
 
 ### Health Checks
 
