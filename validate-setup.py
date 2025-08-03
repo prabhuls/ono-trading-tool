@@ -100,17 +100,56 @@ def check_python_setup() -> bool:
     
     # Check key Python packages
     packages = ['fastapi', 'uvicorn', 'sqlalchemy', 'alembic', 'redis', 'httpx']
-    try:
-        import importlib
-        for package in packages:
+    
+    # If virtual environment exists, check packages using its pip
+    if venv_path.exists():
+        if os.name == 'nt':  # Windows
+            pip_path = venv_path / 'Scripts' / 'pip.exe'
+        else:  # Unix/MacOS
+            pip_path = venv_path / 'bin' / 'pip'
+        
+        if pip_path.exists():
             try:
-                importlib.import_module(package)
-                print_colored(f"✓ {package} installed", Colors.GREEN)
-            except ImportError:
-                print_colored(f"✗ {package} not installed", Colors.RED)
-                all_good = False
-    except Exception as e:
-        print_colored(f"⚠ Could not check packages: {e}", Colors.YELLOW)
+                # Use pip list to check installed packages
+                result = subprocess.run([str(pip_path), 'list', '--format=json'], 
+                                      capture_output=True, text=True, check=True)
+                installed_packages = {pkg['name'].lower() for pkg in json.loads(result.stdout)}
+                
+                for package in packages:
+                    if package.lower() in installed_packages:
+                        print_colored(f"✓ {package} installed", Colors.GREEN)
+                    else:
+                        print_colored(f"✗ {package} not installed", Colors.RED)
+                        all_good = False
+            except Exception as e:
+                print_colored(f"⚠ Could not check packages via pip: {e}", Colors.YELLOW)
+                # Fallback to import method
+                try:
+                    import importlib
+                    for package in packages:
+                        try:
+                            importlib.import_module(package)
+                            print_colored(f"✓ {package} installed", Colors.GREEN)
+                        except ImportError:
+                            print_colored(f"✗ {package} not installed", Colors.RED)
+                            all_good = False
+                except Exception as e2:
+                    print_colored(f"⚠ Could not check packages: {e2}", Colors.YELLOW)
+        else:
+            print_colored("⚠ pip not found in virtual environment", Colors.YELLOW)
+    else:
+        # No venv, try system imports
+        try:
+            import importlib
+            for package in packages:
+                try:
+                    importlib.import_module(package)
+                    print_colored(f"✓ {package} installed", Colors.GREEN)
+                except ImportError:
+                    print_colored(f"✗ {package} not installed", Colors.RED)
+                    all_good = False
+        except Exception as e:
+            print_colored(f"⚠ Could not check packages: {e}", Colors.YELLOW)
     
     return all_good
 
