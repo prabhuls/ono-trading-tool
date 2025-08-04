@@ -56,7 +56,7 @@ Claude Code has specialized subagents for different aspects of development:
 - **`frontend-standards-reviewer`**: Review frontend code against project standards
 
 ### DevOps & Deployment
-- **`railway-devops-engineer`**: Handle deployment, infrastructure, and Docker configuration
+- **`railway-devops-engineer`**: Handle Railway deployments using the Railway CLI, manage infrastructure, and Docker configuration
 
 Use these agents proactively when working on specific areas of the codebase.
 

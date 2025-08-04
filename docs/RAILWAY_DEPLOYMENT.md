@@ -2,6 +2,15 @@
 
 This guide provides step-by-step instructions for deploying the Trading Tools platform to Railway.
 
+## Deployment Methods
+
+Railway offers two ways to deploy your applications:
+
+1. **Railway Dashboard (Recommended)** - Visual interface for easy deployment and configuration
+2. **Railway CLI** - Command-line interface for automation and scripting
+
+This guide covers both methods. Choose the one that best fits your workflow.
+
 ## Table of Contents
 - [Prerequisites](#prerequisites)
 - [Project Setup](#project-setup)
@@ -16,47 +25,122 @@ This guide provides step-by-step instructions for deploying the Trading Tools pl
 ## Prerequisites
 
 1. **Railway Account**: Sign up at [railway.app](https://railway.app)
-2. **Railway CLI** (optional but recommended):
+2. **Railway CLI** (required):
    ```bash
+   # Install via npm (recommended)
    npm install -g @railway/cli
+   
+   # Or install via Homebrew (macOS)
+   brew install railway
+   
+   # Or install via curl (Linux/macOS)
+   curl -sSL https://railway.app/install.sh | sh
+   
+   # Verify installation
+   railway --version
    ```
 3. **GitHub Account**: For automatic deployments
 4. **Docker**: For local PostgreSQL development
 5. **Sentry Account**: For error monitoring (optional)
 
+### Railway CLI Setup
+
+After installing the Railway CLI, authenticate and link your project:
+
+```bash
+# Login to Railway
+railway login
+
+# Create a new project or link to existing
+railway link
+
+# Verify connection
+railway status
+```
+
 ## Project Setup
 
 ### 1. Create New Railway Project
 
+#### Option 1: Using Railway Dashboard (Recommended)
+
+1. Go to [railway.app/new](https://railway.app/new)
+2. Click **"Start a New Project"**
+3. Choose **"Deploy from GitHub repo"** to connect your repository
+4. Or choose **"Empty project"** to start fresh
+
+#### Option 2: Using Railway CLI
+
 ```bash
-# Using CLI
+# Login if not already authenticated
 railway login
+
+# Initialize a new project
 railway init
 
-# Or use the web dashboard
-# Go to https://railway.app/new
+# Or link to an existing project
+railway link
 ```
 
 ### 2. Connect GitHub Repository
 
-1. In Railway dashboard, click "New Project"
-2. Select "Deploy from GitHub repo"
-3. Connect your GitHub account
-4. Select your repository
+#### Option 1: Using Railway Dashboard (Recommended)
+
+1. In your Railway project, click **"Connect GitHub"**
+2. Authorize Railway to access your GitHub account
+3. Select your repository
+4. Choose the branch to deploy (usually `main`)
+
+#### Option 2: Using Railway CLI
+
+```bash
+# Connect GitHub repository via CLI
+railway github
+
+# This will open your browser to connect your GitHub account
+# and select the repository to deploy
+```
 
 ## Backend Deployment
 
 ### 1. Create Backend Service
 
-In Railway dashboard:
-1. Click "New" → "GitHub Repo"
-2. Select your repository
-3. Set **Root Directory** to `/server`
-4. Railway will auto-detect Python/FastAPI
+#### Option 1: Using Railway Dashboard (Recommended)
+
+1. In your Railway project dashboard, click **"New Service"**
+2. Select **"Deploy from GitHub repo"**
+3. Choose your repository
+4. Set **Service Name** to `backend`
+5. Set **Root Directory** to `/server`
+6. Railway will auto-detect Python/FastAPI and configure build settings
+
+#### Option 2: Using Railway CLI
+
+```bash
+# Navigate to server directory
+cd server
+
+# Deploy the backend service
+railway up --service backend
+
+# Or create a new service first
+railway service create backend
+railway up
+```
 
 ### 2. Configure Backend Environment Variables
 
-Add these environment variables in the backend service settings:
+#### Using Railway Dashboard:
+1. Click on your **backend** service
+2. Go to **"Variables"** tab
+3. Add the following environment variables:
+
+#### Using Railway CLI:
+```bash
+railway variables set KEY=value --service backend
+```
+
+Required environment variables:
 
 ```bash
 # Environment
@@ -112,24 +196,54 @@ Or use a `railway.json` file in your server directory:
 ### 4. Deploy Backend
 
 ```bash
-# Using CLI from server directory
+# Deploy using CLI
 cd server
-railway up
+railway up --service backend
 
-# Or push to GitHub for automatic deployment
-git push origin main
+# View deployment logs
+railway logs --service backend
+
+# Or enable automatic deployment from GitHub
+railway github:deploy --service backend
 ```
 
 ## Frontend Deployment
 
 ### 1. Create Frontend Service
 
-1. In Railway project, click "New" → "GitHub Repo"
-2. Select repository again
-3. Set **Root Directory** to `/client`
-4. Railway will detect Next.js
+#### Option 1: Using Railway Dashboard (Recommended)
+
+1. In your Railway project, click **"New Service"**
+2. Select **"Deploy from GitHub repo"**
+3. Choose your repository again
+4. Set **Service Name** to `frontend`
+5. Set **Root Directory** to `/client`
+6. Railway will detect Next.js and configure automatically
+
+#### Option 2: Using Railway CLI
+
+```bash
+# Navigate to client directory
+cd client
+
+# Create and deploy frontend service
+railway service create frontend
+railway up --service frontend
+```
 
 ### 2. Configure Frontend Environment Variables
+
+#### Using Railway Dashboard:
+1. Click on your **frontend** service
+2. Go to **"Variables"** tab
+3. Add the following variables:
+
+#### Using Railway CLI:
+```bash
+railway variables set KEY=value --service frontend
+```
+
+Required environment variables:
 
 ```bash
 # Backend API URL (use your backend service URL)
@@ -160,28 +274,62 @@ npm start
 ### 4. Deploy Frontend
 
 ```bash
-# Using CLI from client directory
+# Deploy using CLI
 cd client
-railway up
+railway up --service frontend
 
-# Or push to GitHub
-git push origin main
+# View deployment logs
+railway logs --service frontend
+
+# Check deployment status
+railway status --service frontend
 ```
 
 ## Database & Redis Setup
 
 ### 1. Add PostgreSQL Service
 
-1. In Railway project, click "New"
-2. Select "Database" → "Add PostgreSQL"
+#### Option 1: Using Railway Dashboard (Recommended)
+
+1. In your Railway project, click **"New Service"**
+2. Select **"Database"** → **"Add PostgreSQL"**
 3. PostgreSQL will be provisioned automatically
-4. Railway provides the connection string automatically
+4. Railway provides the connection string as `DATABASE_URL`
+
+#### Option 2: Using Railway CLI
+
+```bash
+# Add PostgreSQL database
+railway add --plugin postgresql
+
+# Or create a database service
+railway service create postgres --image postgres:15
+
+# Get the database URL
+railway variables get DATABASE_URL --service postgres
+```
 
 ### 2. Add Redis Service
 
-1. In Railway project, click "New"
-2. Select "Database" → "Add Redis"
+#### Option 1: Using Railway Dashboard (Recommended)
+
+1. In your Railway project, click **"New Service"**
+2. Select **"Database"** → **"Add Redis"**
 3. Redis will be provisioned automatically
+4. Railway provides the connection URL as `REDIS_URL`
+
+#### Option 2: Using Railway CLI
+
+```bash
+# Add Redis service
+railway add --plugin redis
+
+# Or create a Redis service
+railway service create redis --image redis:7-alpine
+
+# Get the Redis URL
+railway variables get REDIS_URL --service redis
+```
 
 ### 3. Connect Services
 
@@ -482,9 +630,130 @@ railway run pg_dump $DATABASE_URL > backup.sql
 railway run psql $DATABASE_URL < backup.sql
 ```
 
+## Railway CLI Command Reference
+
+### Authentication & Project Management
+```bash
+# Login to Railway
+railway login
+
+# Logout
+railway logout
+
+# Create new project
+railway init [project-name]
+
+# Link to existing project
+railway link [project-id]
+
+# Unlink project
+railway unlink
+
+# Show current project info
+railway status
+```
+
+### Service Management
+```bash
+# List all services
+railway service list
+
+# Create new service
+railway service create [service-name]
+
+# Delete service
+railway service delete [service-name]
+
+# Switch between services
+railway service [service-name]
+```
+
+### Deployment Commands
+```bash
+# Deploy current directory
+railway up
+
+# Deploy specific service
+railway up --service [service-name]
+
+# Deploy with environment
+railway up --environment [env-name]
+
+# View deployment logs
+railway logs
+railway logs --service [service-name]
+railway logs -f  # Follow logs
+
+# Rollback deployment
+railway down
+```
+
+### Environment Variables
+```bash
+# List all variables
+railway variables
+
+# Set variable
+railway variables set KEY=value
+
+# Set multiple variables
+railway variables set KEY1=value1 KEY2=value2
+
+# Get specific variable
+railway variables get KEY
+
+# Delete variable
+railway variables delete KEY
+
+# Import from .env file
+railway variables set $(cat .env.production)
+```
+
+### Database Operations
+```bash
+# Connect to database
+railway connect [service-name]
+
+# Run database command
+railway run --service postgres psql
+
+# Execute migration
+railway run --service backend alembic upgrade head
+```
+
+### Monitoring & Debugging
+```bash
+# View logs
+railway logs
+railway logs -f  # Follow mode
+railway logs -n 100  # Last 100 lines
+
+# Open project in browser
+railway open
+
+# Get project/service URLs
+railway domain
+
+# SSH into service
+railway shell
+```
+
+### Plugin Management
+```bash
+# List available plugins
+railway plugins
+
+# Add plugin
+railway add --plugin [plugin-name]
+
+# Remove plugin
+railway remove --plugin [plugin-name]
+```
+
 ## Support Resources
 
 - [Railway Documentation](https://docs.railway.app)
+- [Railway CLI Documentation](https://docs.railway.app/develop/cli)
 - [Railway Discord](https://discord.gg/railway)
 - [Status Page](https://status.railway.app)
 
