@@ -10,7 +10,7 @@ import platform
 import subprocess
 import shutil
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Union
 
 # ANSI color codes for cross-platform colored output
 class Colors:
@@ -187,8 +187,8 @@ def setup_node_dependencies() -> bool:
     finally:
         os.chdir(original_dir)
 
-def copy_env_files() -> None:
-    """Copy .env.example files to .env"""
+def copy_env_files(use_database: bool, use_cache: bool) -> None:
+    """Copy .env.example files to .env with optional component settings"""
     print_colored("\nSetting up environment files...", Colors.BLUE)
     
     env_files = [
@@ -204,8 +204,57 @@ def copy_env_files() -> None:
         if src_path.exists() and not dst_path.exists():
             shutil.copy2(src_path, dst_path)
             print_colored(f"✓ Created {dst} from {src}", Colors.GREEN)
+            
+            # Update server/.env with optional component settings
+            if dst == 'server/.env':
+                update_env_file(dst_path, use_database, use_cache)
         elif dst_path.exists():
             print_colored(f"  {dst} already exists", Colors.YELLOW)
+
+def update_env_file(env_path: Path, use_database: bool, use_cache: bool) -> None:
+    """Update .env file with optional component settings"""
+    with open(env_path, 'r') as f:
+        lines = f.readlines()
+    
+    with open(env_path, 'w') as f:
+        for line in lines:
+            if line.startswith('ENABLE_DATABASE='):
+                f.write(f"ENABLE_DATABASE={'true' if use_database else 'false'}\n")
+            elif line.startswith('ENABLE_CACHING='):
+                f.write(f"ENABLE_CACHING={'true' if use_cache else 'false'}\n")
+            else:
+                f.write(line)
+
+def setup_optional_components() -> tuple[bool, bool]:
+    """Ask user about optional components"""
+    print_colored("\nConfiguring optional components...", Colors.BLUE)
+    
+    # Ask about database
+    while True:
+        use_database = input("\nDo you want to use database functionality? (y/n): ").strip().lower()
+        if use_database in ['y', 'yes']:
+            use_database = True
+            break
+        elif use_database in ['n', 'no']:
+            use_database = False
+            break
+        print_colored("Please answer 'y' or 'n'.", Colors.RED)
+    
+    # Ask about cache
+    while True:
+        use_cache = input("Do you want to use caching functionality? (y/n): ").strip().lower()
+        if use_cache in ['y', 'yes']:
+            use_cache = True
+            break
+        elif use_cache in ['n', 'no']:
+            use_cache = False
+            break
+        print_colored("Please answer 'y' or 'n'.", Colors.RED)
+    
+    print_colored(f"\n✓ Database: {'Enabled' if use_database else 'Disabled'}", Colors.GREEN)
+    print_colored(f"✓ Cache: {'Enabled' if use_cache else 'Disabled'}", Colors.GREEN)
+    
+    return use_database, use_cache
 
 def setup_database_choice() -> str:
     """Ask user for database preference"""
@@ -219,9 +268,12 @@ def setup_database_choice() -> str:
             return choice
         print_colored("Invalid choice. Please enter 1 or 2.", Colors.RED)
 
-def print_next_steps(platform_info: dict, docker_available: bool, db_choice: str):
+def print_next_steps(platform_info: dict, docker_available: bool, use_database: bool, use_cache: bool, db_choice: Optional[str]):
     """Print next steps for the user"""
     print_colored("\n✅ Setup Complete!", Colors.GREEN + Colors.BOLD)
+    print_colored("\nYour configuration:", Colors.BLUE)
+    print(f"  Database: {'Enabled' if use_database else 'Disabled'}")
+    print(f"  Cache:    {'Enabled' if use_cache else 'Disabled'}")
     print_colored("\nNext steps:", Colors.BLUE)
     
     # Platform-specific activation commands
@@ -236,28 +288,42 @@ def print_next_steps(platform_info: dict, docker_available: bool, db_choice: str
     print("   - Edit server/.env")
     print("   - Edit client/.env.local")
     
-    print("\n2. Run database migrations:")
-    print(f"   {activate_cmd}")
-    print("   cd server && alembic upgrade head")
+    if use_database:
+        print("\n2. Run database migrations:")
+        print(f"   {activate_cmd}")
+        print("   cd server && alembic upgrade head")
+    else:
+        print("\n2. Database migrations not needed (database disabled)")
     
     print_colored("\n3. Choose your development mode:", Colors.BLUE)
     
-    if db_choice == '1' and docker_available:
-        print("\n   Option A - Hybrid Mode (Recommended)")
-        print("   Database/Redis in Docker, apps native with hot-reloading:")
-        print(f"   {start_script}")
-        
-        print("\n   Option B - Full Docker Mode")
-        print("   Everything runs in containers:")
-        if platform_info['is_windows']:
-            print_colored("   # Run as Administrator if you get permission errors", Colors.YELLOW)
-        elif platform_info['is_linux'] or platform_info['is_mac']:
-            print_colored("   # Use 'sudo docker-compose up' if you get permission errors", Colors.YELLOW)
-        print("   docker-compose up")
-        
-    elif db_choice == '2':
-        print("\n   Ensure PostgreSQL is running locally, then:")
-        print(f"   {start_script}")
+    if not use_database and not use_cache:
+        print("\n   Minimal Mode (no external services):")
+        print(f"   {start_script} --minimal")
+        print("\n   Or use Docker:")
+        print("   docker-compose -f docker-compose.minimal.yml up")
+    else:
+        if db_choice == '1' and docker_available:
+            print("\n   Option A - Hybrid Mode (Recommended)")
+            print("   Database/Redis in Docker, apps native with hot-reloading:")
+            print(f"   {start_script}")
+            
+            if not use_database:
+                print(f"   {start_script} --no-database")
+            if not use_cache:
+                print(f"   {start_script} --no-cache")
+            
+            print("\n   Option B - Full Docker Mode")
+            print("   Everything runs in containers:")
+            if platform_info['is_windows']:
+                print_colored("   # Run as Administrator if you get permission errors", Colors.YELLOW)
+            elif platform_info['is_linux'] or platform_info['is_mac']:
+                print_colored("   # Use 'sudo docker-compose up' if you get permission errors", Colors.YELLOW)
+            print("   docker-compose up")
+            
+        elif db_choice == '2':
+            print("\n   Ensure PostgreSQL is running locally, then:")
+            print(f"   {start_script}")
     
     print_colored("\n📝 Quick Reference:", Colors.BLUE)
     print("   Backend:  http://localhost:8000")
@@ -290,6 +356,9 @@ def main():
     
     docker_available = check_docker()
     
+    # Ask about optional components
+    use_database, use_cache = setup_optional_components()
+    
     # Setup Python environment
     if not setup_python_venv(platform_info):
         sys.exit(1)
@@ -299,13 +368,15 @@ def main():
         sys.exit(1)
     
     # Copy environment files
-    copy_env_files()
+    copy_env_files(use_database, use_cache)
     
-    # Database setup choice
-    db_choice = setup_database_choice()
+    # Database setup choice (only if database is enabled)
+    db_choice = None
+    if use_database:
+        db_choice = setup_database_choice()
     
     # Print next steps
-    print_next_steps(platform_info, docker_available, db_choice)
+    print_next_steps(platform_info, docker_available, use_database, use_cache, db_choice)
 
 if __name__ == "__main__":
     try:

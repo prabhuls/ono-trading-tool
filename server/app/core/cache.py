@@ -28,7 +28,8 @@ class CacheManager:
     """
     
     def __init__(self, redis_url: Optional[str] = None):
-        self.redis_url = redis_url or settings.redis_url
+        self.enabled = settings.enable_caching
+        self.redis_url = redis_url or settings.redis_url if self.enabled else None
         self.redis_client: Optional[redis.Redis] = None
         self.default_ttl = settings.cache.default_ttl
         self.key_prefix = settings.cache.key_prefix
@@ -46,7 +47,15 @@ class CacheManager:
         
     async def connect(self):
         """Connect to Redis"""
+        if not self.enabled:
+            logger.info("Cache is disabled. Skipping Redis connection.")
+            return
+            
         if self._connected:
+            return
+            
+        if not self.redis_url:
+            logger.warning("Redis URL not configured. Cache will operate in no-op mode.")
             return
             
         try:
@@ -70,6 +79,8 @@ class CacheManager:
             await self.redis_client.close()
             self._connected = False
             logger.info("Redis cache disconnected")
+        elif not self.enabled:
+            logger.debug("Cache is disabled. No connection to close.")
             
     def _make_key(
         self, 
@@ -137,8 +148,9 @@ class CacheManager:
         default: Any = None
     ) -> Any:
         """Get value from cache"""
-        if not self._connected or not self.redis_client:
-            self.metrics["errors"] += 1
+        if not self.enabled or not self._connected or not self.redis_client:
+            # In no-op mode, always return default (cache miss)
+            self.metrics["misses"] += 1
             return default
             
         full_key = self._make_key(key, namespace)
@@ -168,9 +180,10 @@ class CacheManager:
         data_type: Optional[str] = None
     ) -> bool:
         """Set value in cache"""
-        if not self._connected or not self.redis_client:
-            self.metrics["errors"] += 1
-            return False
+        if not self.enabled or not self._connected or not self.redis_client:
+            # In no-op mode, pretend the operation succeeded
+            self.metrics["sets"] += 1
+            return True
             
         full_key = self._make_key(key, namespace)
         ttl_seconds = self._get_ttl(ttl, data_type)
@@ -223,8 +236,10 @@ class CacheManager:
         namespace: Optional[str] = None
     ) -> bool:
         """Delete a key from cache"""
-        if not self._connected or not self.redis_client:
-            return False
+        if not self.enabled or not self._connected or not self.redis_client:
+            # In no-op mode, pretend the operation succeeded
+            self.metrics["deletes"] += 1
+            return True
             
         full_key = self._make_key(key, namespace)
         
@@ -245,7 +260,8 @@ class CacheManager:
         namespace: Optional[str] = None
     ) -> int:
         """Delete all keys matching pattern"""
-        if not self._connected or not self.redis_client:
+        if not self.enabled or not self._connected or not self.redis_client:
+            # In no-op mode, return 0 deleted keys
             return 0
             
         full_pattern = self._make_key(pattern, namespace)
@@ -288,7 +304,8 @@ class CacheManager:
         namespace: Optional[str] = None
     ) -> bool:
         """Check if key exists in cache"""
-        if not self._connected or not self.redis_client:
+        if not self.enabled or not self._connected or not self.redis_client:
+            # In no-op mode, keys never exist
             return False
             
         full_key = self._make_key(key, namespace)
@@ -305,7 +322,9 @@ class CacheManager:
         namespace: Optional[str] = None
     ) -> Dict[str, Any]:
         """Get multiple values from cache"""
-        if not self._connected or not self.redis_client:
+        if not self.enabled or not self._connected or not self.redis_client:
+            # In no-op mode, return empty dict
+            self.metrics["misses"] += len(keys)
             return {}
             
         full_keys = [self._make_key(k, namespace) for k in keys]
@@ -335,8 +354,10 @@ class CacheManager:
         namespace: Optional[str] = None
     ) -> bool:
         """Set multiple values in cache"""
-        if not self._connected or not self.redis_client:
-            return False
+        if not self.enabled or not self._connected or not self.redis_client:
+            # In no-op mode, pretend the operation succeeded
+            self.metrics["sets"] += len(data)
+            return True
             
         ttl_seconds = self._get_ttl(ttl)
         
@@ -366,7 +387,8 @@ class CacheManager:
             **self.metrics,
             "total_requests": total_requests,
             "hit_rate": round(hit_rate, 4),
-            "connected": self._connected
+            "connected": self._connected,
+            "enabled": self.enabled
         }
 
 
@@ -437,7 +459,7 @@ def cache(
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
             # Check if caching is enabled
-            if not settings.features.get("enable_caching", True):
+            if not settings.enable_caching:
                 return await func(*args, **kwargs)
                 
             # Check condition

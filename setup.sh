@@ -102,6 +102,35 @@ check_prerequisites() {
     print_success "All prerequisites met!"
 }
 
+# Ask about optional components
+setup_optional_components() {
+    print_info "Configuring optional components..."
+    
+    # Ask about database
+    while true; do
+        echo -n "Do you want to use database functionality? (y/n): "
+        read -r use_database
+        case $use_database in
+            [Yy]* ) USE_DATABASE=true; break;;
+            [Nn]* ) USE_DATABASE=false; break;;
+            * ) echo "Please answer y or n.";;
+        esac
+    done
+    
+    # Ask about cache
+    while true; do
+        echo -n "Do you want to use caching functionality? (y/n): "
+        read -r use_cache
+        case $use_cache in
+            [Yy]* ) USE_CACHE=true; break;;
+            [Nn]* ) USE_CACHE=false; break;;
+            * ) echo "Please answer y or n.";;
+        esac
+    done
+    
+    print_success "Optional components configured!"
+}
+
 # Create root .env file for Docker Compose
 setup_root_env() {
     print_info "Setting up root environment file..."
@@ -159,6 +188,16 @@ setup_backend() {
     if [ ! -f .env ]; then
         print_info "Creating .env file from example..."
         cp .env.example .env
+        
+        # Update ENABLE_DATABASE and ENABLE_CACHING based on user choices
+        if [ "$USE_DATABASE" = false ]; then
+            sed -i.bak 's/^ENABLE_DATABASE=.*/ENABLE_DATABASE=false/' .env
+        fi
+        if [ "$USE_CACHE" = false ]; then
+            sed -i.bak 's/^ENABLE_CACHING=.*/ENABLE_CACHING=false/' .env
+        fi
+        rm -f .env.bak
+        
         print_warning "Please update .env with your API keys and configuration"
     else
         print_info ".env file already exists"
@@ -196,6 +235,12 @@ setup_frontend() {
 
 # Start Docker services
 start_docker_services() {
+    # Only start services if needed
+    if [ "$USE_DATABASE" = false ] && [ "$USE_CACHE" = false ]; then
+        print_info "Skipping Docker services (not needed for minimal setup)"
+        return
+    fi
+    
     print_info "Starting Docker services..."
     
     # Check if Docker daemon is running
@@ -219,9 +264,22 @@ start_docker_services() {
         print_warning "Failed to pull redis image. Trying without authentication..."
     fi
     
-    # Start PostgreSQL and Redis
-    print_info "Starting PostgreSQL and Redis containers..."
-    if ! docker compose up -d postgres redis; then
+    # Determine which services to start
+    SERVICES_TO_START=""
+    if [ "$USE_DATABASE" = true ]; then
+        SERVICES_TO_START="postgres"
+    fi
+    if [ "$USE_CACHE" = true ]; then
+        if [ -n "$SERVICES_TO_START" ]; then
+            SERVICES_TO_START="$SERVICES_TO_START redis"
+        else
+            SERVICES_TO_START="redis"
+        fi
+    fi
+    
+    # Start required services
+    print_info "Starting Docker containers: $SERVICES_TO_START"
+    if ! docker compose up -d $SERVICES_TO_START; then
         print_error "Failed to start Docker containers"
         print_info "Trying alternative approach..."
         
@@ -234,37 +292,47 @@ start_docker_services() {
         }
     fi
     
-    # Wait for PostgreSQL to be ready
-    print_info "Waiting for PostgreSQL to be ready..."
-    for i in {1..30}; do
-        if docker compose exec -T postgres pg_isready -U postgres >/dev/null 2>&1; then
-            print_success "PostgreSQL is ready!"
-            break
-        fi
-        if [ $i -eq 30 ]; then
-            print_error "PostgreSQL failed to start"
-            exit 1
-        fi
-        sleep 1
-    done
+    # Wait for PostgreSQL to be ready (if enabled)
+    if [ "$USE_DATABASE" = true ]; then
+        print_info "Waiting for PostgreSQL to be ready..."
+        for i in {1..30}; do
+            if docker compose exec -T postgres pg_isready -U postgres >/dev/null 2>&1; then
+                print_success "PostgreSQL is ready!"
+                break
+            fi
+            if [ $i -eq 30 ]; then
+                print_error "PostgreSQL failed to start"
+                exit 1
+            fi
+            sleep 1
+        done
+    fi
     
-    # Wait for Redis to be ready
-    print_info "Waiting for Redis to be ready..."
-    for i in {1..30}; do
-        if docker compose exec -T redis redis-cli ping >/dev/null 2>&1; then
-            print_success "Redis is ready!"
-            break
-        fi
-        if [ $i -eq 30 ]; then
-            print_error "Redis failed to start"
-            exit 1
-        fi
-        sleep 1
-    done
+    # Wait for Redis to be ready (if enabled)
+    if [ "$USE_CACHE" = true ]; then
+        print_info "Waiting for Redis to be ready..."
+        for i in {1..30}; do
+            if docker compose exec -T redis redis-cli ping >/dev/null 2>&1; then
+                print_success "Redis is ready!"
+                break
+            fi
+            if [ $i -eq 30 ]; then
+                print_error "Redis failed to start"
+                exit 1
+            fi
+            sleep 1
+        done
+    fi
 }
 
 # Run database migrations
 run_migrations() {
+    # Skip if database is not enabled
+    if [ "$USE_DATABASE" = false ]; then
+        print_info "Skipping database migrations (database not enabled)"
+        return
+    fi
+    
     print_info "Running database migrations..."
     
     cd server
@@ -317,8 +385,8 @@ except Exception as e:
 create_start_scripts() {
     print_info "Creating start scripts..."
     
-    # Create start-dev.sh
-    cat > start-dev.sh << 'EOF'
+    # Copy the actual start-dev.sh content that supports optional components
+    cat > start-dev.sh << 'START_DEV_CONTENT'
 #!/bin/bash
 
 # Trading Tools Development Environment Startup Script
@@ -337,24 +405,49 @@ set -e
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+RED='\033[0;31m'
 NC='\033[0m'
 
 # Parse command line arguments
 USE_DOCKER=false
+NO_DATABASE=false
+NO_CACHE=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         --docker)
             USE_DOCKER=true
             shift
             ;;
+        --no-database)
+            NO_DATABASE=true
+            shift
+            ;;
+        --no-cache)
+            NO_CACHE=true
+            shift
+            ;;
+        --minimal)
+            NO_DATABASE=true
+            NO_CACHE=true
+            shift
+            ;;
         --help)
             echo "Usage: ./start-dev.sh [options]"
             echo ""
             echo "Options:"
-            echo "  --docker    Use full Docker mode (all services in containers)"
-            echo "  --help      Show this help message"
+            echo "  --docker        Use full Docker mode (all services in containers)"
+            echo "  --no-database   Start without PostgreSQL (sets ENABLE_DATABASE=false)"
+            echo "  --no-cache      Start without Redis (sets ENABLE_CACHING=false)"
+            echo "  --minimal       Start without database and cache (same as --no-database --no-cache)"
+            echo "  --help          Show this help message"
             echo ""
             echo "Default: Hybrid mode (PostgreSQL/Redis in Docker, apps run natively)"
+            echo ""
+            echo "Examples:"
+            echo "  ./start-dev.sh                    # Start with all services"
+            echo "  ./start-dev.sh --minimal          # Start only backend and frontend"
+            echo "  ./start-dev.sh --no-cache         # Start without Redis"
+            echo "  ./start-dev.sh --docker --minimal # Use minimal docker-compose"
             exit 0
             ;;
         *)
@@ -365,80 +458,194 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [ "$USE_DOCKER" = true ]; then
-    echo -e "${BLUE}Starting in Full Docker mode...${NC}"
-    echo "All services will run in containers"
-    echo ""
+# Function to update .env file
+update_env_var() {
+    local var_name=$1
+    local var_value=$2
+    local env_file=$3
     
-    # Start all services with Docker Compose
-    docker-compose up
+    if grep -q "^${var_name}=" "$env_file"; then
+        # Update existing variable
+        sed -i.bak "s/^${var_name}=.*/${var_name}=${var_value}/" "$env_file"
+    else
+        # Add new variable
+        echo "${var_name}=${var_value}" >> "$env_file"
+    fi
+}
+
+if [ "$USE_DOCKER" = true ]; then
+    if [ "$NO_DATABASE" = true ] && [ "$NO_CACHE" = true ]; then
+        echo -e "${BLUE}Starting in Minimal Docker mode...${NC}"
+        echo "Only backend and frontend will run in containers"
+        echo ""
+        
+        # Start services with minimal docker-compose
+        docker-compose -f docker-compose.minimal.yml up
+    else
+        echo -e "${BLUE}Starting in Full Docker mode...${NC}"
+        echo "All services will run in containers"
+        echo ""
+        
+        # Start all services with Docker Compose
+        docker-compose up
+    fi
 else
     echo -e "${BLUE}Starting in Hybrid mode...${NC}"
-    echo "Database/Cache in Docker, Apps run natively for hot-reloading"
-    echo ""
     
-    # Check if Docker is running
-    if ! docker info >/dev/null 2>&1; then
-        echo -e "${YELLOW}Docker is not running. Please start Docker Desktop first.${NC}"
-        exit 1
+    # Determine which services to start
+    SERVICES_TO_START=""
+    if [ "$NO_DATABASE" = false ]; then
+        SERVICES_TO_START="$SERVICES_TO_START postgres"
+    fi
+    if [ "$NO_CACHE" = false ]; then
+        SERVICES_TO_START="$SERVICES_TO_START redis"
     fi
     
-    # Start Docker services (PostgreSQL and Redis only)
-    echo "Starting PostgreSQL and Redis..."
-    docker compose up -d postgres redis
+    if [ -n "$SERVICES_TO_START" ]; then
+        echo "Services to start in Docker:$SERVICES_TO_START"
+    else
+        echo "No Docker services needed (minimal mode)"
+    fi
+    echo ""
     
-    # Wait for services to be ready
-    echo "Waiting for database..."
-    for i in {1..30}; do
-        if docker compose exec -T postgres pg_isready -U postgres >/dev/null 2>&1; then
-            echo -e "${GREEN}✓ PostgreSQL is ready${NC}"
-            break
-        fi
-        if [ $i -eq 30 ]; then
-            echo "PostgreSQL failed to start"
+    # Check if Docker is running (only if we need it)
+    if [ -n "$SERVICES_TO_START" ]; then
+        if ! docker info >/dev/null 2>&1; then
+            echo -e "${YELLOW}Docker is not running. Please start Docker Desktop first.${NC}"
             exit 1
         fi
-        sleep 1
-    done
+        
+        # Start Docker services
+        echo "Starting Docker services..."
+        docker compose up -d $SERVICES_TO_START
+        
+        # Wait for services to be ready
+        if [ "$NO_DATABASE" = false ]; then
+            echo "Waiting for database..."
+            for i in {1..30}; do
+                if docker compose exec -T postgres pg_isready -U postgres >/dev/null 2>&1; then
+                    echo -e "${GREEN}✓ PostgreSQL is ready${NC}"
+                    break
+                fi
+                if [ $i -eq 30 ]; then
+                    echo -e "${RED}PostgreSQL failed to start${NC}"
+                    exit 1
+                fi
+                sleep 1
+            done
+        fi
+        
+        if [ "$NO_CACHE" = false ]; then
+            echo "Waiting for Redis..."
+            for i in {1..30}; do
+                if docker compose exec -T redis redis-cli ping >/dev/null 2>&1; then
+                    echo -e "${GREEN}✓ Redis is ready${NC}"
+                    break
+                fi
+                if [ $i -eq 30 ]; then
+                    echo -e "${RED}Redis failed to start${NC}"
+                    exit 1
+                fi
+                sleep 1
+            done
+        fi
+    fi
+    
+    # Update backend .env file based on flags
+    cd server
+    if [ -f .env ]; then
+        # Update feature flags
+        update_env_var "ENABLE_DATABASE" $([ "$NO_DATABASE" = true ] && echo "false" || echo "true") .env
+        update_env_var "ENABLE_CACHING" $([ "$NO_CACHE" = true ] && echo "false" || echo "true") .env
+        
+        # Remove backup file
+        rm -f .env.bak
+    else
+        echo -e "${YELLOW}Warning: server/.env file not found${NC}"
+        echo "Creating minimal .env file..."
+        cat > .env << EOF
+ENVIRONMENT=development
+DEBUG=True
+SECRET_KEY=dev-secret-key-$(openssl rand -hex 16)
+ENABLE_DATABASE=$( [ "$NO_DATABASE" = true ] && echo "false" || echo "true" )
+ENABLE_CACHING=$( [ "$NO_CACHE" = true ] && echo "false" || echo "true" )
+EOF
+        if [ "$NO_DATABASE" = false ]; then
+            echo "DATABASE_URL=postgresql://postgres:password@localhost:5432/trading_tools" >> .env
+        fi
+        if [ "$NO_CACHE" = false ]; then
+            echo "REDIS_URL=redis://localhost:6379" >> .env
+        fi
+    fi
     
     # Start backend
     echo "Starting backend server..."
-    cd server
     source venv/bin/activate
     # Export environment variables from .env file
-    if [ -f .env ]; then
     set -a
     source .env
     set +a
-else
-    print_error ".env file not found"
-    exit 1
-fi
+    
     uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 &
     BACKEND_PID=$!
     cd ..
     
     # Start frontend
-    echo "Starting frontend server..."
+    echo "Starting frontend..."
     cd client
     npm run dev &
     FRONTEND_PID=$!
     cd ..
     
+    # Function to cleanup on exit
+    cleanup() {
+        echo -e "\n${YELLOW}Shutting down services...${NC}"
+        
+        # Kill native processes
+        if [ ! -z "$BACKEND_PID" ]; then
+            kill $BACKEND_PID 2>/dev/null || true
+        fi
+        if [ ! -z "$FRONTEND_PID" ]; then
+            kill $FRONTEND_PID 2>/dev/null || true
+        fi
+        
+        # Stop Docker services if they were started
+        if [ -n "$SERVICES_TO_START" ]; then
+            echo "Stopping Docker services..."
+            docker compose down
+        fi
+        
+        echo -e "${GREEN}✓ All services stopped${NC}"
+        exit 0
+    }
+    
+    # Set up signal handlers
+    trap cleanup INT TERM
+    
+    # Show access information
     echo ""
-    echo -e "${GREEN}Services started successfully!${NC}"
+    echo -e "${GREEN}═══════════════════════════════════════${NC}"
+    echo -e "${GREEN}✓ Development environment is ready!${NC}"
+    echo -e "${GREEN}═══════════════════════════════════════${NC}"
     echo ""
-    echo "  Backend:  http://localhost:8000"
+    echo "Access your application at:"
     echo "  Frontend: http://localhost:3000"
-    echo "  API Docs: http://localhost:8000/docs"
+    echo "  Backend:  http://localhost:8000"
+    echo "  API Docs: http://localhost:8000/api/v1/docs"
+    echo ""
+    echo "Service Status:"
+    echo -e "  Backend:  ${GREEN}Running${NC} (with hot-reload)"
+    echo -e "  Frontend: ${GREEN}Running${NC} (with hot-reload)"
+    echo -e "  Database: $([ "$NO_DATABASE" = true ] && echo "${YELLOW}Disabled${NC}" || echo "${GREEN}Running${NC}")"
+    echo -e "  Cache:    $([ "$NO_CACHE" = true ] && echo "${YELLOW}Disabled${NC}" || echo "${GREEN}Running${NC}")"
     echo ""
     echo "Press Ctrl+C to stop all services"
+    echo ""
     
     # Wait for interrupt
-    trap "echo 'Stopping services...'; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; docker compose stop postgres redis; exit" INT
     wait
 fi
-EOF
+START_DEV_CONTENT
 
     # Create stop-dev.sh
     cat > stop-dev.sh << 'EOF'
@@ -504,30 +711,55 @@ print_next_steps() {
     echo -e "${GREEN}Setup Complete!${NC}"
     echo -e "${GREEN}═══════════════════════════════════════════════════════════${NC}"
     echo ""
+    echo "Your configuration:"
+    echo "  Database: $([ "$USE_DATABASE" = true ] && echo "Enabled" || echo "Disabled")"
+    echo "  Cache:    $([ "$USE_CACHE" = true ] && echo "Enabled" || echo "Disabled")"
+    echo ""
     echo "Next steps:"
     echo ""
     echo "1. Update environment files with your API keys:"
     echo "   - server/.env"
     echo "   - client/.env.local"
     echo ""
-    echo "2. Choose your development mode:"
-    echo ""
-    echo "   ${BLUE}Option A - Hybrid Mode (Recommended)${NC}"
-    echo "   Database/Redis in Docker, apps run natively with hot-reloading:"
-    echo "   ./start-dev.sh"
-    echo ""
-    echo "   ${BLUE}Option B - Full Docker Mode${NC}"
-    echo "   Everything runs in containers:"
-    echo "   docker-compose up"
-    echo ""
-    echo "   ${BLUE}Option C - Full Native Mode${NC}"
-    echo "   Run PostgreSQL/Redis locally, then:"
-    echo "   ./start-dev.sh  (it will skip Docker and use local services)"
+    
+    if [ "$USE_DATABASE" = true ] || [ "$USE_CACHE" = true ]; then
+        echo "2. Choose your development mode:"
+        echo ""
+        echo "   ${BLUE}Option A - Hybrid Mode (Recommended)${NC}"
+        echo "   Database/Redis in Docker, apps run natively with hot-reloading:"
+        echo "   ./start-dev.sh"
+        echo ""
+        echo "   ${BLUE}Option B - Full Docker Mode${NC}"
+        echo "   Everything runs in containers:"
+        echo "   docker-compose up"
+        echo ""
+        echo "   ${BLUE}Option C - Minimal Mode${NC}"
+        echo "   Run without selected components:"
+        if [ "$USE_DATABASE" = false ]; then
+            echo "   ./start-dev.sh --no-database"
+        fi
+        if [ "$USE_CACHE" = false ]; then
+            echo "   ./start-dev.sh --no-cache"
+        fi
+        if [ "$USE_DATABASE" = false ] && [ "$USE_CACHE" = false ]; then
+            echo "   ./start-dev.sh --minimal"
+        fi
+    else
+        echo "2. Start your development environment:"
+        echo ""
+        echo "   ${BLUE}Minimal Mode${NC}"
+        echo "   No external services needed:"
+        echo "   ./start-dev.sh --minimal"
+        echo ""
+        echo "   Or use Docker:"
+        echo "   docker-compose -f docker-compose.minimal.yml up"
+    fi
+    
     echo ""
     echo "3. Access the applications:"
     echo "   - Frontend: http://localhost:3000"
     echo "   - Backend API: http://localhost:8000"
-    echo "   - API Documentation: http://localhost:8000/docs"
+    echo "   - API Documentation: http://localhost:8000/api/v1/docs"
     echo ""
     echo "4. To stop all services:"
     echo "   ./stop-dev.sh  (for hybrid mode)"
@@ -549,6 +781,7 @@ main() {
     
     # Run setup steps
     check_prerequisites
+    setup_optional_components
     setup_root_env
     setup_backend
     setup_frontend
@@ -587,8 +820,12 @@ try:
     from app.core.config import settings
     print(f'✓ Configuration loaded successfully')
     print(f'  Environment: {settings.environment}')
-    print(f'  Database URL: {settings.database_url.split(\"@\")[1] if \"@\" in settings.database_url else settings.database_url}')
-    print(f'  Redis URL: {settings.redis_url}')
+    print(f'  Database enabled: {settings.enable_database}')
+    if settings.enable_database and settings.database_url:
+        print(f'  Database URL: {settings.database_url.split(\"@\")[1] if \"@\" in settings.database_url else settings.database_url}')
+    print(f'  Cache enabled: {settings.enable_caching}')
+    if settings.enable_caching and settings.redis_url:
+        print(f'  Redis URL: {settings.redis_url}')
 except Exception as e:
     print(f'✗ Configuration error: {e}')
     sys.exit(1)

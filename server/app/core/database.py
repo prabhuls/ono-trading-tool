@@ -38,26 +38,30 @@ class Base(DeclarativeBase):
     metadata = metadata
 
 
-# Create async engine
-engine: AsyncEngine = create_async_engine(
-    settings.async_database_url,
-    echo=settings.database.echo,
-    pool_size=settings.database.pool_size,
-    max_overflow=settings.database.max_overflow,
-    pool_timeout=settings.database.pool_timeout,
-    pool_recycle=settings.database.pool_recycle,
-    pool_pre_ping=True,  # Enable connection health checks
-    poolclass=NullPool if settings.is_testing else QueuePool,
-)
+# Create async engine only if database is enabled
+engine: Optional[AsyncEngine] = None
+async_session_maker: Optional[async_sessionmaker] = None
 
-# Create async session factory
-async_session_maker = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-    autocommit=False,
-    autoflush=False,
-)
+if settings.enable_database and settings.async_database_url:
+    engine = create_async_engine(
+        settings.async_database_url,
+        echo=settings.database.echo,
+        pool_size=settings.database.pool_size,
+        max_overflow=settings.database.max_overflow,
+        pool_timeout=settings.database.pool_timeout,
+        pool_recycle=settings.database.pool_recycle,
+        pool_pre_ping=True,  # Enable connection health checks
+        poolclass=NullPool if settings.is_testing else QueuePool,
+    )
+
+    # Create async session factory
+    async_session_maker = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
 
 
 # Database dependency for FastAPI
@@ -70,6 +74,12 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         async def get_users(db: AsyncSession = Depends(get_db)):
             ...
     """
+    if not settings.enable_database:
+        raise RuntimeError("Database is not enabled. Set ENABLE_DATABASE=true to use database features.")
+    
+    if not async_session_maker:
+        raise RuntimeError("Database is not properly configured. Check DATABASE_URL setting.")
+    
     async with async_session_maker() as session:
         try:
             yield session
@@ -90,6 +100,12 @@ async def get_db_context() -> AsyncGenerator[AsyncSession, None]:
         async with get_db_context() as db:
             user = await db.get(User, user_id)
     """
+    if not settings.enable_database:
+        raise RuntimeError("Database is not enabled. Set ENABLE_DATABASE=true to use database features.")
+    
+    if not async_session_maker:
+        raise RuntimeError("Database is not properly configured. Check DATABASE_URL setting.")
+    
     async with async_session_maker() as session:
         try:
             yield session
@@ -107,6 +123,13 @@ class DatabaseManager:
     @staticmethod
     async def create_all():
         """Create all tables"""
+        if not settings.enable_database:
+            logger.warning("Database is disabled. Skipping table creation.")
+            return
+            
+        if not engine:
+            raise RuntimeError("Database engine is not initialized")
+            
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
             logger.info("Database tables created successfully")
@@ -114,6 +137,13 @@ class DatabaseManager:
     @staticmethod
     async def drop_all():
         """Drop all tables (use with caution!)"""
+        if not settings.enable_database:
+            logger.warning("Database is disabled. Skipping table drop.")
+            return
+            
+        if not engine:
+            raise RuntimeError("Database engine is not initialized")
+            
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.drop_all)
             logger.warning("All database tables dropped")
@@ -121,6 +151,14 @@ class DatabaseManager:
     @staticmethod
     async def check_connection() -> bool:
         """Check if database connection is healthy"""
+        if not settings.enable_database:
+            logger.info("Database is disabled")
+            return False
+            
+        if not engine:
+            logger.error("Database engine is not initialized")
+            return False
+            
         try:
             async with engine.connect() as conn:
                 await conn.execute("SELECT 1")
@@ -132,29 +170,33 @@ class DatabaseManager:
     @staticmethod
     async def close():
         """Close database connections"""
-        await engine.dispose()
-        logger.info("Database connections closed")
+        if engine:
+            await engine.dispose()
+            logger.info("Database connections closed")
+        else:
+            logger.info("No database connections to close")
 
 
-# Connection pool event listeners
-@event.listens_for(Pool, "connect")
-def set_sqlite_pragma(dbapi_connection, connection_record):
-    """Set SQLite pragmas for better performance (if using SQLite)"""
-    if settings.database_url.startswith("sqlite"):
+# Connection pool event listeners (only register if database is enabled)
+if settings.enable_database and engine:
+    @event.listens_for(Pool, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        """Set SQLite pragmas for better performance (if using SQLite)"""
+        if settings.database_url and settings.database_url.startswith("sqlite"):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+
+
+    @event.listens_for(Pool, "checkout")
+    def ping_connection(dbapi_connection, connection_record, connection_proxy):
+        """Ping database connection to check if it's still valid"""
         cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
-
-@event.listens_for(Pool, "checkout")
-def ping_connection(dbapi_connection, connection_record, connection_proxy):
-    """Ping database connection to check if it's still valid"""
-    cursor = dbapi_connection.cursor()
-    try:
-        cursor.execute("SELECT 1")
-    except:
-        # Connection is broken, let's reconnect
-        raise
+        try:
+            cursor.execute("SELECT 1")
+        except:
+            # Connection is broken, let's reconnect
+            raise
 
 
 # Transaction decorator
@@ -174,6 +216,9 @@ def transactional(func):
             return user
     """
     async def wrapper(*args, **kwargs):
+        if not settings.enable_database:
+            raise RuntimeError("Database is not enabled. Cannot use @transactional decorator.")
+            
         # Find the session in args or kwargs
         session = None
         for arg in args:

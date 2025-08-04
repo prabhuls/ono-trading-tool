@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 import os
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
@@ -99,12 +99,14 @@ class Settings(BaseSettings):
     security: SecurityConfig = SecurityConfig()
     
     # Database
-    database_url: str = Field(..., validation_alias="DATABASE_URL")
+    database_url: Optional[str] = Field(None, validation_alias="DATABASE_URL")
     database: DatabaseConfig = DatabaseConfig()
+    enable_database: bool = Field(default=True, validation_alias="ENABLE_DATABASE")
     
     # Redis
-    redis_url: str = Field(default="redis://localhost:6379", validation_alias="REDIS_URL")
+    redis_url: Optional[str] = Field(None, validation_alias="REDIS_URL")
     cache: CacheConfig = CacheConfig()
+    enable_caching: bool = Field(default=True, validation_alias="ENABLE_CACHING")
     
     # External APIs
     polygon_api_key: Optional[str] = Field(None, validation_alias="POLYGON_API_KEY")
@@ -126,7 +128,6 @@ class Settings(BaseSettings):
     # Feature Flags
     features: Dict[str, bool] = {
         "enable_websockets": True,
-        "enable_caching": True,
         "enable_rate_limiting": True,
         "enable_metrics": True,
     }
@@ -138,9 +139,25 @@ class Settings(BaseSettings):
         extra="allow"
     )
     
+    @model_validator(mode='after')
+    def validate_database_config(self):
+        """Validate database configuration"""
+        if self.enable_database and not self.database_url:
+            raise ValueError("DATABASE_URL is required when ENABLE_DATABASE=true")
+        return self
+    
+    @model_validator(mode='after')
+    def validate_cache_config(self):
+        """Validate cache configuration"""
+        if self.enable_caching and not self.redis_url:
+            raise ValueError("REDIS_URL is required when ENABLE_CACHING=true")
+        return self
+    
     @property
-    def async_database_url(self) -> str:
+    def async_database_url(self) -> Optional[str]:
         """Convert sync DATABASE_URL to async format for SQLAlchemy"""
+        if not self.database_url:
+            return None
         if self.database_url.startswith("postgresql://"):
             return self.database_url.replace("postgresql://", "postgresql+asyncpg://")
         return self.database_url

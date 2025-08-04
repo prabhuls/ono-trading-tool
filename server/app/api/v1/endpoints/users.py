@@ -9,9 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from passlib.context import CryptContext
 
-from app.core.database import get_db
+from app.core.dependencies import get_db, require_database
 from app.core.responses import ResponseHandler
-from app.core.cache import cache
+from app.core.cache import cache, cache_manager
 from app.models.user import User
 from app.utils.database import DatabaseCRUD, PaginationParams
 from app.schemas.user import (
@@ -30,6 +30,7 @@ user_crud = DatabaseCRUD[User](User)
 
 
 @router.post("/", response_model=UserResponse)
+@require_database
 async def create_user(
     user_in: UserCreate,
     db: AsyncSession = Depends(get_db)
@@ -58,6 +59,7 @@ async def create_user(
 
 
 @router.get("/", response_model=UserListResponse)
+@require_database
 @cache(ttl=60, namespace="users")
 async def list_users(
     page: int = Query(1, ge=1),
@@ -96,6 +98,7 @@ async def list_users(
 
 
 @router.get("/{user_id}", response_model=UserResponse)
+@require_database
 @cache(ttl=300, namespace="users", key_builder=lambda user_id: f"user:{user_id}")
 async def get_user(
     user_id: str,
@@ -118,6 +121,7 @@ async def get_user(
 
 
 @router.patch("/{user_id}", response_model=UserResponse)
+@require_database
 async def update_user(
     user_id: str,
     user_update: UserUpdate,
@@ -142,7 +146,7 @@ async def update_user(
     user = await user_crud.update(db, db_obj=user, obj_in=update_data)
     
     # Invalidate cache
-    await cache.delete(f"users:user:{user_id}")
+    await cache_manager.delete(f"user:{user_id}", namespace="users")
     
     return response_handler.success(
         data=UserResponse.from_orm(user),
@@ -151,6 +155,7 @@ async def update_user(
 
 
 @router.delete("/{user_id}")
+@require_database
 async def delete_user(
     user_id: str,
     db: AsyncSession = Depends(get_db)
@@ -162,8 +167,8 @@ async def delete_user(
         raise HTTPException(status_code=404, detail="User not found")
     
     # Invalidate cache
-    await cache.delete(f"users:user:{user_id}")
-    await cache.delete_pattern("users:*")
+    await cache_manager.delete(f"user:{user_id}", namespace="users")
+    await cache_manager.delete_pattern("*", namespace="users")
     
     return response_handler.success(
         message="User deleted successfully"
@@ -171,6 +176,7 @@ async def delete_user(
 
 
 @router.get("/{user_id}/watchlists")
+@require_database
 async def get_user_watchlists(
     user_id: str,
     db: AsyncSession = Depends(get_db)

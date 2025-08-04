@@ -6,12 +6,13 @@ A production-ready boilerplate for building trading and investment tools with Fa
 
 ### Backend (FastAPI)
 - **Enterprise-level architecture** with clear separation of concerns
+- **Optional database and caching** - Use only what you need
 - **Centralized logging system** with structured JSON logging
 - **Standardized API responses** for consistent client handling
-- **Advanced caching system** with Redis integration and decorators
+- **Advanced caching system** with Redis integration and decorators (optional)
 - **Comprehensive error monitoring** with Sentry integration
 - **External API service pattern** with retry logic and rate limiting
-- **Async database support** with PostgreSQL and SQLAlchemy ORM
+- **Async database support** with PostgreSQL and SQLAlchemy ORM (optional)
 - **API versioning** and OpenAPI documentation
 - **Health checks** and readiness probes
 - **Rate limiting** and security middleware
@@ -38,12 +39,12 @@ A production-ready boilerplate for building trading and investment tools with Fa
 
 - Python 3.9+ (3.11 recommended)
 - Node.js 18+ (LTS recommended)
-- Docker & Docker Compose (for database services)
 - Git
 
 Optional:
-- PostgreSQL (if not using Docker)
-- Redis (if not using Docker)
+- Docker & Docker Compose (only if using database/cache)
+- PostgreSQL (if using database without Docker)
+- Redis (if using cache without Docker)
 
 ## 🛠️ Quick Start
 
@@ -64,36 +65,63 @@ setup.bat  # or setup.ps1 for PowerShell
 python setup.py  # or python3 setup.py
 ```
 
+The setup script will ask:
+- Do you want to use database functionality? (y/n)
+- Do you want to use caching functionality? (y/n)
+
 This will:
 1. Check all prerequisites
 2. Create Python virtual environment
 3. Install all dependencies
 4. Set up environment files
-5. Start Docker services (PostgreSQL & Redis)
-6. Run database migrations
+5. Start Docker services (only if needed)
+6. Run database migrations (only if database enabled)
 7. Create development scripts
 
 ### Development Modes
 
-After setup, you can choose from three development modes:
+After setup, you can choose from several development modes:
 
-#### 1. Hybrid Mode (Recommended)
+#### 1. Hybrid Mode (Recommended for full features)
 Database/Redis in Docker, applications run natively for hot-reloading:
 ```bash
 ./start-dev.sh    # Unix/macOS
 start-dev.bat     # Windows
 ```
 
-#### 2. Full Docker Mode
-Everything runs in containers:
+#### 2. Minimal Mode (No database/cache)
+Perfect for lightweight tools:
 ```bash
-docker-compose up
+./start-dev.sh --minimal    # Unix/macOS
+start-dev.bat --minimal     # Windows
 ```
 
-#### 3. Full Native Mode
+#### 3. Partial Modes
+Use only what you need:
+```bash
+# Database only (no cache)
+./start-dev.sh --no-cache
+start-dev.bat --no-cache
+
+# Cache only (no database)
+./start-dev.sh --no-database
+start-dev.bat --no-database
+```
+
+#### 4. Full Docker Mode
+Everything runs in containers:
+```bash
+# With all services
+docker-compose up
+
+# Minimal (no database/cache)
+docker-compose -f docker-compose.minimal.yml up
+```
+
+#### 5. Full Native Mode
 Everything runs locally (requires local PostgreSQL/Redis):
 ```bash
-# Configure local database in server/.env
+# Configure local services in server/.env
 ./start-dev.sh    # Will use local services
 ```
 
@@ -187,10 +215,14 @@ git merge boilerplate/main
 ENVIRONMENT=development
 SECRET_KEY=your-secret-key
 
-# Database
+# Optional Components
+ENABLE_DATABASE=true  # Set to false for tools without persistence
+ENABLE_CACHING=true   # Set to false for tools without caching
+
+# Database (required if ENABLE_DATABASE=true)
 DATABASE_URL=postgresql://postgres:password@localhost:5432/trading_tools
 
-# Redis
+# Redis (required if ENABLE_CACHING=true)
 REDIS_URL=redis://localhost:6379
 
 # External APIs
@@ -254,6 +286,46 @@ tool-boilerplate/
 └── README.md
 ```
 
+## 🎯 Optional Components
+
+The boilerplate supports running without database and/or cache, making it perfect for:
+- API gateway services
+- Calculation tools
+- Data transformation services
+- Lightweight microservices
+
+### When to Use Optional Components
+
+| Tool Type | Database | Cache | Example |
+|-----------|----------|-------|------|
+| Data Scanner | ✓ | ✓ | Store scan results, cache API calls |
+| API Gateway | ✗ | ✓ | Transform requests, cache responses |
+| Calculator | ✗ | ✗ | Simple calculations, no storage |
+| Report Generator | ✓ | ✗ | Store reports, no caching needed |
+
+### Configuring Optional Components
+
+```bash
+# During setup
+python setup.py
+# Answer: n to "Do you want to use database functionality?"
+# Answer: n to "Do you want to use caching functionality?"
+
+# Or configure manually in server/.env
+ENABLE_DATABASE=false
+ENABLE_CACHING=false
+
+# Then start with
+./start-dev.sh --minimal
+```
+
+### API Behavior with Disabled Components
+
+- **Database disabled**: Database-dependent endpoints return 503 Service Unavailable
+- **Cache disabled**: Cache operations become no-ops (always miss, no errors)
+
+See [Optional Components Guide](OPTIONAL_COMPONENTS.md) for detailed information.
+
 ## 🏗️ Architecture
 
 ### Backend Architecture
@@ -262,7 +334,7 @@ The backend follows a layered architecture:
 
 1. **API Layer** (`app/api/`) - HTTP endpoints and request handling
 2. **Service Layer** (`app/services/`) - Business logic
-3. **Data Layer** (`app/models/`) - Database models
+3. **Data Layer** (`app/models/`) - Database models (optional)
 4. **Core Layer** (`app/core/`) - Shared utilities and configuration
 
 ### Key Components
@@ -294,14 +366,37 @@ return create_error_response(
 )
 ```
 
-#### Caching
+#### Caching (Optional)
 ```python
 from app.core.cache import cache
 
+# Works even if caching is disabled (becomes no-op)
 @cache(ttl=300, namespace="market_data")
 async def get_stock_price(symbol: str):
-    # This will be cached for 5 minutes
+    # This will be cached for 5 minutes if cache enabled
     return await fetch_price(symbol)
+```
+
+#### Database Dependencies (Optional)
+```python
+from app.core.dependencies import require_database, get_db
+
+# This endpoint requires database
+@router.get("/users")
+@require_database
+async def get_users(db: AsyncSession = Depends(get_db)):
+    # Returns 503 if database is disabled
+    return await db.execute(select(User)).scalars().all()
+
+# This endpoint works with or without database
+from app.core.dependencies import OptionalDatabase
+
+@router.get("/status")
+async def get_status(db: Optional[AsyncSession] = Depends(OptionalDatabase())):
+    if db:
+        user_count = await db.execute(select(func.count(User.id)))
+        return {"users": user_count}
+    return {"users": "database disabled"}
 ```
 
 #### External API Services
@@ -322,24 +417,32 @@ class PolygonService(ExternalAPIService):
 ### Railway Deployment
 
 1. Create new project on Railway
-2. Add PostgreSQL database service
-3. Add Redis service
-4. Deploy backend:
+2. Add services based on your needs:
+   - PostgreSQL database (if ENABLE_DATABASE=true)
+   - Redis (if ENABLE_CACHING=true)
+3. Deploy backend:
    ```bash
    cd server
    railway up
    ```
-5. Deploy frontend:
+4. Deploy frontend:
    ```bash
    cd client
    railway up
    ```
+5. Set environment variables:
+   - `ENABLE_DATABASE=true/false`
+   - `ENABLE_CACHING=true/false`
+   - Only add DATABASE_URL/REDIS_URL if enabled
 
 ### Docker Deployment
 
 ```bash
-# Build and start all services
+# Full deployment (with database and cache)
 docker-compose up -d
+
+# Minimal deployment (no database/cache)
+docker-compose -f docker-compose.minimal.yml up -d
 
 # View logs
 docker-compose logs -f
@@ -364,6 +467,21 @@ Both frontend and backend are integrated with Sentry for error tracking only:
 
 - Backend: `http://localhost:8000/health`
 - Frontend: `http://localhost:3000/api/health`
+
+Health endpoint shows status of optional components:
+```json
+{
+  "status": "healthy",
+  "database": {
+    "enabled": false,
+    "connected": null
+  },
+  "cache": {
+    "enabled": false,
+    "connected": null
+  }
+}
+```
 
 ## 🛡️ Security
 

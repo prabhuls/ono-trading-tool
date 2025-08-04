@@ -35,10 +35,23 @@ async def lifespan(app: FastAPI):
     # Initialize Sentry
     ErrorMonitoring.init_sentry(settings)
     
-    # Connect to cache
-    await cache_manager.connect()
+    # Connect to cache if enabled
+    if settings.enable_caching:
+        await cache_manager.connect()
+    else:
+        logger.info("Cache is disabled")
     
-    # Initialize other services here (database, external APIs, etc.)
+    # Initialize database if enabled
+    if settings.enable_database:
+        from app.core.database import DatabaseManager
+        if await DatabaseManager.check_connection():
+            logger.info("Database connection established")
+        else:
+            logger.warning("Database connection failed")
+    else:
+        logger.info("Database is disabled")
+    
+    # Initialize other services here (external APIs, etc.)
     
     logger.info("Application started successfully")
     
@@ -47,8 +60,14 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down application")
     
-    # Disconnect from cache
-    await cache_manager.disconnect()
+    # Disconnect from cache if enabled
+    if settings.enable_caching:
+        await cache_manager.disconnect()
+    
+    # Close database connections if enabled
+    if settings.enable_database:
+        from app.core.database import DatabaseManager
+        await DatabaseManager.close()
     
     # Close other connections here
     
@@ -219,16 +238,31 @@ async def health_check():
     """
     # Check cache connection
     cache_status = {
-        "connected": cache_manager._connected,
-        "metrics": cache_manager.get_metrics()
+        "enabled": settings.enable_caching,
+        "connected": cache_manager._connected if settings.enable_caching else None,
+        "metrics": cache_manager.get_metrics() if settings.enable_caching else None
     }
+    
+    # Check database connection
+    database_status = {
+        "enabled": settings.enable_database,
+        "connected": None
+    }
+    
+    if settings.enable_database:
+        from app.core.database import DatabaseManager
+        database_status["connected"] = await DatabaseManager.check_connection()
     
     # Check external services (example)
     external_services = []
     # Add your external service health checks here
     
-    # Overall health
-    is_healthy = cache_manager._connected  # Add more checks as needed
+    # Overall health - system is healthy if all enabled services are connected
+    is_healthy = True
+    if settings.enable_caching and not cache_manager._connected:
+        is_healthy = False
+    if settings.enable_database and not database_status["connected"]:
+        is_healthy = False
     
     health_data = {
         "status": "healthy" if is_healthy else "degraded",
@@ -236,8 +270,13 @@ async def health_check():
         "environment": settings.environment,
         "uptime_seconds": time.time() - app.state.start_time if hasattr(app.state, "start_time") else 0,
         "cache": cache_status,
+        "database": database_status,
         "external_services": external_services,
-        "features": settings.features
+        "features": {
+            "database": settings.enable_database,
+            "caching": settings.enable_caching,
+            **settings.features
+        }
     }
     
     status_code = status.HTTP_200_OK if is_healthy else status.HTTP_503_SERVICE_UNAVAILABLE

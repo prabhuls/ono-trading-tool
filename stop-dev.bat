@@ -26,11 +26,24 @@ if %errorlevel% equ 0 (
 REM Stop Docker services if running
 docker info >nul 2>&1
 if %errorlevel% equ 0 (
-    echo Stopping Docker services...
-    docker-compose stop postgres redis >nul 2>&1
-    if %errorlevel% equ 0 (
-        echo Docker services stopped
+    REM Check which services are actually running
+    set "services_running=false"
+    docker compose ps --quiet postgres 2>nul | findstr . >nul
+    if %errorlevel% equ 0 set "services_running=true"
+    docker compose ps --quiet redis 2>nul | findstr . >nul
+    if %errorlevel% equ 0 set "services_running=true"
+    
+    if "%services_running%"=="true" (
+        echo Stopping Docker services...
+        docker compose stop postgres redis >nul 2>&1
+        if %errorlevel% equ 0 (
+            echo Docker services stopped
+        )
+    ) else (
+        echo No Docker services were running
     )
+) else (
+    echo Docker is not running
 )
 
 echo.
