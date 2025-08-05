@@ -38,27 +38,10 @@ else
     pkill -f "next dev"
 fi
 
-# Stop Docker services if they're running
-if docker info >/dev/null 2>&1; then
-    # Check if any services are actually running
-    services_running=false
-    if docker compose ps --quiet postgres 2>/dev/null | grep -q .; then
-        services_running=true
-    fi
-    if docker compose ps --quiet redis 2>/dev/null | grep -q .; then
-        services_running=true
-    fi
-    
-    if [ "$services_running" = true ]; then
-        echo "Stopping Docker services..."
-        docker compose stop postgres redis
-        echo "Docker services stopped"
-    else
-        echo "No Docker services were running"
-    fi
-else
-    echo "Docker is not running"
+# Stop Docker services
+if docker compose ps --quiet postgres redis 2>/dev/null | grep -q .; then
+    echo "Stopping Docker services..."
+    docker compose stop postgres redis
 fi
 
-echo ""
 echo "All services stopped"
