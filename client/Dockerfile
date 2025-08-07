@@ -1,6 +1,11 @@
 # Build stage
 FROM --platform=$BUILDPLATFORM node:20-alpine AS builder
 
+# Accept build arguments for environment variables
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_APP_NAME
+ARG RAILWAY_ENVIRONMENT
+
 # Set working directory
 WORKDIR /app
 
@@ -12,6 +17,11 @@ RUN npm ci
 
 # Copy source code
 COPY . .
+
+# Set environment variables from build args
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
+ENV RAILWAY_ENVIRONMENT=$RAILWAY_ENVIRONMENT
 
 # Build the application with Sentry disabled if no auth token
 ENV NEXT_TELEMETRY_DISABLED=1

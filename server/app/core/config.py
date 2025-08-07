@@ -98,6 +98,9 @@ class Settings(BaseSettings):
     secret_key: str = Field(..., validation_alias="SECRET_KEY")
     security: SecurityConfig = SecurityConfig()
     
+    # Frontend URL
+    frontend_url: Optional[str] = Field(None, validation_alias="FRONTEND_URL")
+    
     # Database
     database_url: Optional[str] = Field(None, validation_alias="DATABASE_URL")
     database: DatabaseConfig = DatabaseConfig()
@@ -165,14 +168,42 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> List[str]:
         """Get CORS origins based on environment"""
+        origins = []
+        
         if self.environment == "development":
-            return [
+            # Development origins
+            origins = [
                 "http://localhost:3000",
                 "http://localhost:3001",
                 "http://127.0.0.1:3000",
                 "http://127.0.0.1:3001",
             ]
-        return self.security.allowed_origins
+        else:
+            # Production origins from settings
+            origins = self.security.allowed_origins.copy()
+        
+        # Add FRONTEND_URL if specified
+        if self.frontend_url:
+            # Parse the URL to ensure it's properly formatted
+            frontend_origin = self.frontend_url
+            if not frontend_origin.startswith(("http://", "https://")):
+                frontend_origin = f"https://{frontend_origin}"
+            if frontend_origin not in origins:
+                origins.append(frontend_origin)
+        
+        # Add Railway app domains (both http and https)
+        railway_patterns = [
+            "https://*.railway.app",
+            "http://*.railway.app",
+            "https://*.up.railway.app",
+            "http://*.up.railway.app"
+        ]
+        
+        # In production, add specific Railway domains
+        if self.environment == "production":
+            origins.extend(railway_patterns)
+        
+        return origins
     
     @property
     def logging_config(self) -> LoggingConfig:

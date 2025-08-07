@@ -87,9 +87,18 @@ app = FastAPI(
 
 # Add trusted host middleware (security)
 if settings.is_production:
+    allowed_hosts = ["*.railway.app", "*.up.railway.app"]
+    
+    # Add frontend domain if specified
+    if settings.frontend_url:
+        from urllib.parse import urlparse
+        parsed = urlparse(settings.frontend_url if settings.frontend_url.startswith(("http://", "https://")) else f"https://{settings.frontend_url}")
+        if parsed.hostname:
+            allowed_hosts.append(parsed.hostname)
+    
     app.add_middleware(
         TrustedHostMiddleware,
-        allowed_hosts=["*.yourdomain.com", "yourdomain.com"]
+        allowed_hosts=allowed_hosts
     )
 
 # Add CORS middleware
