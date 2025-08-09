@@ -4,6 +4,24 @@
 
 This boilerplate implements a streamlined JWT-based authentication system designed for tools that receive authentication tokens from One Click Trading's main platform. The system uses RS256 (RSA public key) verification for production tokens and supports HS256 for development.
 
+**Important**: Authentication can be completely disabled for development/testing by setting `ENABLE_AUTH=false` in your `.env` file.
+
+## Quick Start for Development
+
+1. **Disable authentication entirely** (Recommended for initial development):
+   ```bash
+   # In your server/.env file
+   ENABLE_AUTH=false
+   ```
+   Now all API endpoints work without any authentication!
+
+2. **Enable authentication** (For production or testing auth flows):
+   ```bash
+   # In your server/.env file
+   ENABLE_AUTH=true
+   ```
+   Now endpoints using `conditional_jwt_token` will require valid JWT tokens.
+
 ## Key Features
 
 - **External Authentication**: Users authenticate through One Click Trading and arrive with a JWT token
@@ -31,6 +49,9 @@ This boilerplate implements a streamlined JWT-based authentication system design
 ### Backend Environment Variables
 
 ```bash
+# Authentication toggle (new)
+ENABLE_AUTH=false  # Set to true to require authentication for API endpoints
+
 # Only frontend URL needed
 FRONTEND_URL=http://localhost:3000
 ```
@@ -52,24 +73,47 @@ NEXT_PUBLIC_FRONTEND_URL=http://localhost:3000
 6. **Authenticated access**: User can access protected features until token expires
 7. **Token expiration**: User redirected back to login page to re-authenticate
 
+## Disabling Authentication for Development
+
+When `ENABLE_AUTH=false` is set in your `.env` file:
+- All API endpoints work without requiring any authentication token
+- The `conditional_jwt_token` dependency returns `None` instead of checking for tokens
+- Perfect for local development and testing without dealing with JWT tokens
+- Frontend can call backend APIs directly without authentication headers
+
 ## Usage Examples
 
 ### Backend: Protecting Endpoints
 
-#### 1. Basic Authentication Required
+#### 1. Conditional Authentication (Respects ENABLE_AUTH setting)
 
 ```python
-from app.core.auth import get_current_user_jwt
+from app.core.auth import conditional_jwt_token
+from typing import Optional
 from fastapi import Depends
 
 @router.get("/protected")
-async def protected_endpoint(jwt_payload = Depends(get_current_user_jwt)):
-    if not jwt_payload:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+async def protected_endpoint(jwt_payload: Optional[JWTPayload] = Depends(conditional_jwt_token)):
+    # When ENABLE_AUTH=false, jwt_payload will be None
+    # When ENABLE_AUTH=true, jwt_payload will contain user data or raise 401
+    if jwt_payload:
+        return {"message": f"Hello {jwt_payload.email}"}
+    return {"message": "Hello anonymous (auth disabled)"}
+```
+
+#### 2. Always Require Authentication (Ignores ENABLE_AUTH)
+
+```python
+from app.core.auth import require_jwt_token
+from fastapi import Depends
+
+@router.get("/always-protected")
+async def always_protected_endpoint(jwt_payload = Depends(require_jwt_token)):
+    # This will always require authentication regardless of ENABLE_AUTH setting
     return {"message": f"Hello {jwt_payload.email}"}
 ```
 
-#### 2. Optional Authentication
+#### 3. Optional Authentication (Always Optional)
 
 ```python
 from app.core.auth import get_current_user_jwt
@@ -77,21 +121,21 @@ from typing import Optional
 
 @router.get("/public")
 async def public_endpoint(jwt_payload: Optional[JWTPayload] = Depends(get_current_user_jwt)):
+    # This is always optional - doesn't raise errors if no token
     if jwt_payload:
         return {"message": f"Hello {jwt_payload.email}"}
     return {"message": "Hello anonymous"}
 ```
 
-#### 3. Subscription Required
+#### 4. Subscription Required
 
 ```python
-from app.core.auth import get_current_user_jwt
+from app.core.auth import conditional_jwt_token
 
 @router.get("/premium")
-async def premium_endpoint(jwt_payload = Depends(get_current_user_jwt)):
-    if not jwt_payload:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    if not jwt_payload.get_subscription("FI"):
+async def premium_endpoint(jwt_payload: Optional[JWTPayload] = Depends(conditional_jwt_token)):
+    # When ENABLE_AUTH=false, this check is bypassed
+    if jwt_payload and not jwt_payload.get_subscription("FI"):
         raise HTTPException(status_code=403, detail="FI subscription required")
     return {"message": "Premium content"}
 ```

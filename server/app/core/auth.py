@@ -9,6 +9,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.security import verify_jwt_token, extract_token_from_header, JWTPayload, validate_subscription
 from app.core.logging import get_logger
 from app.core.database import get_db
+from app.core.config import settings
 from app.models.user import User
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -352,3 +353,42 @@ async def optional_user(
         select(User).where(User.external_auth_id == jwt_payload.user_id)
     )
     return result.scalar_one_or_none()
+
+
+async def conditional_jwt_token(
+    token: Optional[str] = Depends(get_current_token)
+) -> Optional[JWTPayload]:
+    """
+    Conditionally require JWT token based on ENABLE_AUTH setting
+    
+    Args:
+        token: JWT token from request
+        
+    Returns:
+        JWTPayload if authenticated or auth disabled, None if auth disabled and no token
+        
+    Raises:
+        HTTPException: If auth is enabled and token is missing/invalid
+    """
+    # If auth is disabled, return None (no authentication required)
+    if not settings.enable_auth:
+        return None
+    
+    # If auth is enabled, require valid token
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authentication token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    jwt_payload = verify_jwt_token(token)
+    
+    if not jwt_payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    return jwt_payload
