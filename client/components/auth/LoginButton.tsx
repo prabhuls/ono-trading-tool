@@ -4,31 +4,34 @@ import { useAuth } from "@/contexts/AuthContext";
 
 interface LoginButtonProps {
   className?: string;
-  redirectUri?: string;
+  token?: string;
   children?: React.ReactNode;
 }
 
 /**
- * Login button component that initiates OAuth flow
+ * Login button component for setting JWT token
+ * In production, the token would come from an external authentication service
  */
 export const LoginButton: React.FC<LoginButtonProps> = ({
   className = "px-4 py-2 bg-primary text-white rounded hover:bg-primary-dark transition-colors",
-  redirectUri,
+  token,
   children,
 }) => {
-  const { login } = useAuth();
+  const { setToken } = useAuth();
 
   const handleLogin = () => {
-    if (redirectUri) {
-      // Store redirect URI in session storage for use after login
-      sessionStorage.setItem("auth_redirect", redirectUri);
+    if (token) {
+      // Set the provided token
+      setToken(token);
+    } else {
+      // In production, this would redirect to external auth or show a token input
+      console.warn("No token provided. In production, obtain token from authentication service.");
     }
-    login();
   };
 
   return (
     <button onClick={handleLogin} className={className}>
-      {children || "Sign In"}
+      {children || "Set Token"}
     </button>
   );
 };

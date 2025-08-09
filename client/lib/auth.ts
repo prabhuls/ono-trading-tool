@@ -22,7 +22,7 @@ export interface AuthState {
 export interface AuthResponse {
   access_token: string;
   token_type: string;
-  user: User;
+  user?: User;
 }
 
 export interface TokenVerifyResponse {
@@ -91,48 +91,10 @@ export class AuthService {
   }
 
   /**
-   * Initiate OAuth login flow
+   * Set token from external source (e.g., received from parent application)
    */
-  static initiateLogin(redirectUri?: string): void {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    const frontendUrl = process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin;
-    
-    // Build the login URL
-    const params = new URLSearchParams();
-    if (redirectUri) {
-      params.append("redirect_uri", `${frontendUrl}${redirectUri}`);
-    }
-    
-    const loginUrl = `${baseUrl}/api/v1/auth/login${params.toString() ? `?${params}` : ""}`;
-    
-    // Redirect to backend login endpoint which will redirect to OAuth provider
-    window.location.href = loginUrl;
-  }
-
-  /**
-   * Handle OAuth callback
-   */
-  static async handleOAuthCallback(code: string): Promise<AuthResponse | null> {
-    try {
-      const response = await ApiClient.get<AuthResponse>(
-        `/api/v1/auth/callback?code=${code}`
-      );
-      
-      if (response.success && response.data) {
-        const authData = response.data;
-        
-        // Store token and user
-        this.setToken(authData.access_token);
-        this.setStoredUser(authData.user);
-        
-        return authData;
-      }
-      
-      return null;
-    } catch (error) {
-      console.error("OAuth callback error:", error);
-      return null;
-    }
+  static setExternalToken(token: string): void {
+    this.setToken(token);
   }
 
   /**
@@ -143,7 +105,7 @@ export class AuthService {
       const token = this.getToken();
       if (!token) return false;
       
-      const response = await ApiClient.post<TokenVerifyResponse>("/api/v1/auth/verify");
+      const response = await ApiClient.post<TokenVerifyResponse>("/api/v1/auth/auth/verify");
       
       if (response.success && response.data?.valid) {
         return true;
@@ -159,38 +121,6 @@ export class AuthService {
     }
   }
 
-  /**
-   * Get current user from backend
-   */
-  static async getCurrentUser(): Promise<User | null> {
-    try {
-      const response = await ApiClient.get<User>("/api/v1/auth/user");
-      
-      if (response.success && response.data) {
-        this.setStoredUser(response.data);
-        return response.data;
-      }
-      
-      return null;
-    } catch (error) {
-      console.error("Get current user error:", error);
-      return null;
-    }
-  }
-
-  /**
-   * Logout user
-   */
-  static async logout(): Promise<void> {
-    try {
-      await ApiClient.post("/api/v1/auth/logout");
-    } catch (error) {
-      console.error("Logout error:", error);
-    } finally {
-      // Always clear local auth data
-      this.clearAuth();
-    }
-  }
 
   /**
    * Check if user has a specific subscription
@@ -201,7 +131,7 @@ export class AuthService {
         has_subscription: boolean;
         authenticated: boolean;
         subscription_data?: unknown;
-      }>(`/api/v1/auth/check-subscription/${subscriptionName}`);
+      }>(`/api/v1/auth/auth/check-subscription/${subscriptionName}`);
       
       return response.data?.has_subscription || false;
     } catch (error) {
@@ -231,19 +161,14 @@ export class AuthService {
       });
       
       const response = await ApiClient.get<AuthResponse>(
-        `/api/v1/auth/dev/create-test-token?${params}`
+        `/api/v1/auth/auth/dev/create-test-token?${params}`
       );
       
       if (response.success && response.data) {
         const token = response.data.access_token;
         this.setToken(token);
         
-        // Get user data with the test token
-        const user = await this.getCurrentUser();
-        if (user) {
-          console.log("Test token created and user logged in:", user);
-        }
-        
+        console.log("Test token created successfully");
         return token;
       }
       
@@ -255,7 +180,7 @@ export class AuthService {
   }
 
   /**
-   * Handle token from URL (for OAuth flow)
+   * Handle token from URL parameters (if passed as query param)
    */
   static handleTokenFromUrl(): boolean {
     if (typeof window === "undefined") return false;
@@ -274,5 +199,32 @@ export class AuthService {
     }
     
     return false;
+  }
+
+  /**
+   * Decode JWT token to get payload (client-side only, no verification)
+   */
+  static decodeToken(token?: string): Record<string, unknown> | null {
+    const tokenToUse = token || this.getToken();
+    if (!tokenToUse) return null;
+
+    try {
+      const payload = JSON.parse(atob(tokenToUse.split('.')[1]));
+      return payload;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Check if token is expired (client-side check)
+   */
+  static isTokenExpired(token?: string): boolean {
+    const payload = this.decodeToken(token);
+    if (!payload || !payload.exp) return true;
+    
+    const exp = payload.exp as number;
+    const now = Math.floor(Date.now() / 1000);
+    return exp < now;
   }
 }

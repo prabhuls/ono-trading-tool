@@ -2,31 +2,36 @@
 
 ## Overview
 
-This boilerplate includes a complete JWT-based authentication system that integrates with a one-click trading service using OAuth 2.0. The implementation uses RS256 (RSA public key) verification for maximum security.
+This boilerplate implements a streamlined JWT-based authentication system designed for tools that receive authentication tokens from One Click Trading's main platform. The system uses RS256 (RSA public key) verification for production tokens and supports HS256 for development.
+
+## Key Features
+
+- **External Authentication**: Users authenticate through One Click Trading and arrive with a JWT token
+- **No User Management**: No local user database, registration, or password management
+- **No Logout**: Tools rely on token expiration; users re-authenticate through One Click Trading
+- **Token-Based Subscriptions**: Subscription data embedded directly in JWT payload
+- **Simplified UI**: No user menu, profile, or account management features
 
 ## Architecture
 
 ### Backend (FastAPI)
-- **JWT Verification**: RS256 algorithm with RSA public key
-- **User Management**: Automatic user creation on first login
-- **Subscription Tracking**: Real-time subscription status from trading service
+- **JWT Verification**: RS256 algorithm with RSA public key (supports HS256 for development)
+- **Stateless Authentication**: No session management or database users
+- **Subscription Tracking**: Subscription data extracted from JWT payload
 - **Flexible Protection**: Decorators and dependencies for endpoint protection
 
 ### Frontend (Next.js)
 - **Auth Context**: Global authentication state management
-- **Auth Guards**: Components for protecting pages
-- **Token Management**: Automatic token storage and injection
-- **OAuth Flow**: Seamless integration with trading service
+- **Automatic Token Detection**: Captures token from URL parameters
+- **Protected Routes**: Redirects unauthenticated users to login page
+- **No User Menu**: Simplified interface without logout or profile features
 
 ## Configuration
 
 ### Backend Environment Variables
 
 ```bash
-# Required for OAuth integration
-TRADING_SERVICE_AUTH_URL=https://auth.tradingservice.com
-TRADING_SERVICE_CLIENT_ID=your-client-id
-TRADING_SERVICE_CLIENT_SECRET=your-client-secret
+# Only frontend URL needed
 FRONTEND_URL=http://localhost:3000
 ```
 
@@ -37,6 +42,16 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_FRONTEND_URL=http://localhost:3000
 ```
 
+## Authentication Flow
+
+1. **User visits tool directly**: Redirected to login page
+2. **Login page**: Displays message and button to authenticate via One Click Trading
+3. **User clicks login**: Redirected to `https://app.oneclicktrading.com/landing/login`
+4. **After authentication**: One Click Trading redirects back with `?token=JWT_TOKEN`
+5. **Token capture**: Frontend automatically detects and stores token
+6. **Authenticated access**: User can access protected features until token expires
+7. **Token expiration**: User redirected back to login page to re-authenticate
+
 ## Usage Examples
 
 ### Backend: Protecting Endpoints
@@ -44,146 +59,101 @@ NEXT_PUBLIC_FRONTEND_URL=http://localhost:3000
 #### 1. Basic Authentication Required
 
 ```python
-from app.core.auth import get_current_active_user
+from app.core.auth import get_current_user_jwt
 from fastapi import Depends
 
 @router.get("/protected")
-async def protected_endpoint(user = Depends(get_current_active_user)):
-    return {"message": f"Hello {user.email}"}
+async def protected_endpoint(jwt_payload = Depends(get_current_user_jwt)):
+    if not jwt_payload:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return {"message": f"Hello {jwt_payload.email}"}
 ```
 
 #### 2. Optional Authentication
 
 ```python
-from app.core.auth import optional_user
+from app.core.auth import get_current_user_jwt
+from typing import Optional
 
 @router.get("/public")
-async def public_endpoint(user = Depends(optional_user)):
-    if user:
-        return {"message": f"Hello {user.email}"}
+async def public_endpoint(jwt_payload: Optional[JWTPayload] = Depends(get_current_user_jwt)):
+    if jwt_payload:
+        return {"message": f"Hello {jwt_payload.email}"}
     return {"message": "Hello anonymous"}
 ```
 
 #### 3. Subscription Required
 
 ```python
-from app.core.auth import require_subscription
+from app.core.auth import get_current_user_jwt
 
 @router.get("/premium")
-@require_subscription("PREMIUM")
-async def premium_endpoint(request: Request):
+async def premium_endpoint(jwt_payload = Depends(get_current_user_jwt)):
+    if not jwt_payload:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    if not jwt_payload.get_subscription("FI"):
+        raise HTTPException(status_code=403, detail="FI subscription required")
     return {"message": "Premium content"}
 ```
 
-#### 4. Multiple Scopes Required
+### Frontend: Authentication Implementation
 
-```python
-from app.core.auth import require_scopes
-
-@router.post("/admin/action")
-@require_scopes("admin:write", "admin:delete")
-async def admin_action(request: Request):
-    return {"message": "Admin action performed"}
-```
-
-#### 5. Using JWT Payload Directly
-
-```python
-from app.core.auth import get_current_user_jwt
-
-@router.get("/user/subscriptions")
-async def get_subscriptions(jwt_payload = Depends(get_current_user_jwt)):
-    return {"subscriptions": jwt_payload.subscriptions}
-```
-
-### Frontend: Protecting Pages
-
-#### 1. Using AuthGuard Component
-
-```tsx
-import { AuthGuard } from "@/components/auth/AuthGuard";
-
-export default function ProtectedPage() {
-  return (
-    <AuthGuard>
-      <div>Protected content here</div>
-    </AuthGuard>
-  );
-}
-```
-
-#### 2. With Subscription Requirement
-
-```tsx
-<AuthGuard requiredSubscription="PREMIUM">
-  <div>Premium content here</div>
-</AuthGuard>
-```
-
-#### 3. Using HOC Pattern
-
-```tsx
-import { withAuth } from "@/contexts/AuthContext";
-
-function PremiumPage() {
-  return <div>Premium content</div>;
-}
-
-export default withAuth(PremiumPage, {
-  requiredSubscription: "PREMIUM",
-  redirectTo: "/subscription-required"
-});
-```
-
-#### 4. Using Auth Hook
+#### 1. AuthContext Usage
 
 ```tsx
 import { useAuth } from "@/contexts/AuthContext";
 
-function Component() {
-  const { user, isAuthenticated, checkSubscription, login, logout } = useAuth();
+function MyComponent() {
+  const { isAuthenticated, user, checkSubscription } = useAuth();
   
   if (!isAuthenticated) {
-    return <button onClick={login}>Sign In</button>;
+    // Redirect to login or show public content
+    return <div>Please log in</div>;
   }
   
-  const hasPremium = checkSubscription("PREMIUM");
+  const hasFI = checkSubscription("FI");
+  const hasDITTY = checkSubscription("DITTY");
   
   return (
     <div>
-      <p>Welcome {user.email}</p>
-      {hasPremium && <p>You have premium access!</p>}
-      <button onClick={logout}>Sign Out</button>
+      <p>Welcome {user?.email}</p>
+      {hasFI && <div>FI Content</div>}
+      {hasDITTY && <div>DITTY Content</div>}
     </div>
   );
 }
 ```
 
-## Authentication Flow
+#### 2. Protected Page
 
-1. **Login Initiation**
-   - User clicks login button
-   - Frontend redirects to `/api/v1/auth/login`
-   - Backend redirects to trading service OAuth
+```tsx
+"use client";
 
-2. **OAuth Authorization**
-   - User authenticates with trading service
-   - Trading service redirects back with authorization code
+import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
-3. **Token Exchange**
-   - Backend exchanges code for JWT token
-   - Verifies token with RSA public key
-   - Creates/updates user in database
+export default function ProtectedPage() {
+  const { isAuthenticated, isLoading } = useAuth();
+  const router = useRouter();
 
-4. **Session Establishment**
-   - Frontend stores JWT token
-   - Token automatically included in API requests
-   - User data cached in context
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push("/login");
+    }
+  }, [isAuthenticated, isLoading, router]);
 
-5. **Token Verification**
-   - Each protected request verifies JWT
-   - Subscription data checked in real-time
-   - User access granted/denied based on requirements
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  return <div>Protected content here</div>;
+}
+```
 
 ## JWT Token Structure
 
@@ -194,25 +164,23 @@ function Component() {
   "username": "johndoe",
   "full_name": "John Doe",
   "subscriptions": {
-    "BASIC": true,
-    "PREMIUM": true,
     "FI": true,
-    "DITTY": false
+    "DITTY": true
   },
-  "scopes": ["read", "write"],
   "exp": 1234567890,
-  "iat": 1234567880
+  "iat": 1234567880,
+  "type": "access",
+  "is_active": true
 }
 ```
 
-## Security Features
+## API Endpoints
 
-- **RS256 Verification**: Asymmetric key cryptography for token verification
-- **Automatic Token Injection**: Tokens automatically added to API requests
-- **Secure Storage**: Tokens stored in localStorage with HttpOnly cookie option
-- **CSRF Protection**: State parameter in OAuth flow
-- **Rate Limiting**: Built-in rate limiting for auth endpoints
-- **Token Expiration**: Automatic handling of expired tokens
+### Authentication Endpoints
+
+- `POST /api/v1/auth/auth/verify` - Verify current token
+- `GET /api/v1/auth/auth/check-subscription/{subscription_name}` - Check specific subscription
+- `GET /api/v1/auth/auth/dev/create-test-token` - Create test token (development only)
 
 ## Development Tools
 
@@ -220,7 +188,7 @@ function Component() {
 
 ```bash
 # Create a test token for development
-curl "http://localhost:8000/api/v1/auth/dev/create-test-token?user_id=test-123&email=test@example.com&include_subscriptions=true"
+curl "http://localhost:8000/api/v1/auth/auth/dev/create-test-token?user_id=test-123&email=test@example.com&include_subscriptions=true"
 ```
 
 ### Verify Token
@@ -228,7 +196,7 @@ curl "http://localhost:8000/api/v1/auth/dev/create-test-token?user_id=test-123&e
 ```bash
 # Verify current token
 curl -H "Authorization: Bearer YOUR_TOKEN" \
-  -X POST "http://localhost:8000/api/v1/auth/verify"
+  -X POST "http://localhost:8000/api/v1/auth/auth/verify"
 ```
 
 ### Check Subscription
@@ -236,50 +204,49 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
 ```bash
 # Check specific subscription
 curl -H "Authorization: Bearer YOUR_TOKEN" \
-  "http://localhost:8000/api/v1/auth/check-subscription/PREMIUM"
+  "http://localhost:8000/api/v1/auth/auth/check-subscription/FI"
 ```
 
-## Database Schema
+## Security Features
 
-The User model includes:
-- `external_auth_id`: Unique ID from trading service
-- `subscription_data`: JSON field with current subscriptions
-- `last_login_at`: Timestamp of last authentication
+- **RS256 Verification**: Asymmetric key cryptography for token verification
+- **Hardcoded Public Key**: RSA public key embedded in configuration
+- **HS256 Development Mode**: Simplified symmetric key for development tokens
+- **Token Expiration**: Automatic handling of expired tokens
+- **URL Token Cleanup**: Automatically removes token from URL after capture
+- **No Sensitive Operations**: No logout endpoints or session management to exploit
 
 ## Troubleshooting
 
 ### Common Issues
 
 1. **"Invalid token" errors**
-   - Verify RSA public key is correctly configured
-   - Check token hasn't expired
+   - Verify token hasn't expired
    - Ensure token is being sent in Authorization header
+   - Check if using correct algorithm (RS256 for production, HS256 for dev)
 
-2. **"User not found" after login**
-   - Check database connection
-   - Verify user creation on first login
-   - Check for unique constraint violations
-
-3. **OAuth redirect issues**
-   - Verify FRONTEND_URL is correctly set
-   - Check OAuth client configuration with trading service
-   - Ensure callback URL is whitelisted
-
-4. **Subscription not detected**
+2. **Subscription not detected**
    - Verify subscription data in JWT payload
-   - Check subscription name matches exactly
+   - Check subscription name matches exactly (case-sensitive)
    - Ensure token is recent (subscriptions may change)
+
+3. **Redirect loop**
+   - Clear localStorage and cookies
+   - Ensure FRONTEND_URL is correctly configured
+   - Check that One Click Trading is sending token parameter
+
+4. **Token not captured from URL**
+   - Verify URL contains `?token=` parameter
+   - Check browser console for errors
+   - Ensure AuthContext is properly initialized
 
 ## Best Practices
 
-1. **Always use HTTPS in production** for OAuth redirects
-2. **Store sensitive config in environment variables**, never in code
-3. **Implement token refresh** before expiration for better UX
-4. **Cache user data** to reduce API calls
-5. **Use subscription checks** at both frontend and backend
-6. **Log authentication events** for security auditing
-7. **Implement rate limiting** on auth endpoints
-8. **Handle token expiration gracefully** with auto-redirect to login
+1. **Always use HTTPS in production** for secure token transmission
+2. **Handle token expiration gracefully** by redirecting to login
+3. **Validate subscriptions** at both frontend and backend
+4. **Don't store sensitive data** in localStorage beyond the token
+5. **Test with development tokens** before production deployment
 
 ## Examples for Tool Builders
 
@@ -296,40 +263,33 @@ async def get_market_data():
 
 ```python
 @router.get("/api/protected/portfolio")
-async def get_portfolio(user = Depends(get_current_active_user)):
-    # Requires valid JWT token
-    return {"user_id": user.id, "portfolio": [...]}
+async def get_portfolio(jwt_payload = Depends(get_current_user_jwt)):
+    if not jwt_payload:
+        raise HTTPException(status_code=401)
+    return {"user_id": jwt_payload.user_id, "portfolio": [...]}
 ```
 
 ### Creating a Subscription-Gated Feature
 
 ```python
-@router.get("/api/premium/advanced-analytics")
-@require_subscription("PREMIUM")
-async def get_advanced_analytics(request: Request):
-    # Only accessible with PREMIUM subscription
-    return {"analytics": [...]}
+@router.get("/api/premium/fi-data")
+async def get_fi_data(jwt_payload = Depends(get_current_user_jwt)):
+    if not jwt_payload or not jwt_payload.get_subscription("FI"):
+        raise HTTPException(status_code=403, detail="FI subscription required")
+    return {"fi_data": [...]}
 ```
 
-### Frontend Page with Mixed Access
+## What's NOT Included
 
-```tsx
-export default function TradingDashboard() {
-  const { isAuthenticated, checkSubscription } = useAuth();
-  
-  return (
-    <div>
-      {/* Public content */}
-      <MarketOverview />
-      
-      {/* Authenticated content */}
-      {isAuthenticated && <Portfolio />}
-      
-      {/* Premium content */}
-      {checkSubscription("PREMIUM") && <AdvancedCharts />}
-    </div>
-  );
-}
-```
+This simplified authentication system intentionally excludes:
 
-This authentication system provides maximum flexibility for tool builders to choose what features require authentication and what subscription levels are needed for different functionality.
+- User registration or signup
+- Password management or reset
+- User profiles or settings
+- Logout functionality (rely on token expiration)
+- User menu or account dropdown
+- Session management
+- OAuth flows or client credentials
+- Refresh tokens (users re-authenticate through One Click Trading)
+
+This design ensures tools remain lightweight and focused on their core functionality while delegating authentication complexity to One Click Trading's main platform.

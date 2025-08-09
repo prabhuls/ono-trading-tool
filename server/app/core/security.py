@@ -58,7 +58,7 @@ class JWTPayload:
 
 def verify_jwt_token(token: str) -> Optional[JWTPayload]:
     """
-    Verify JWT token using RSA public key
+    Verify JWT token - supports both RS256 (production) and HS256 (development)
     
     Args:
         token: JWT token string
@@ -67,13 +67,22 @@ def verify_jwt_token(token: str) -> Optional[JWTPayload]:
         JWTPayload object if valid, None otherwise
     """
     try:
-        # Decode and verify the token
-        payload = jwt.decode(
-            token,
-            settings.security.jwt_public_key,
-            algorithms=[settings.security.algorithm],
-            options={"verify_exp": True}
-        )
+        # First try RS256 with public key (for production tokens)
+        try:
+            payload = jwt.decode(
+                token,
+                settings.security.jwt_public_key,
+                algorithms=["RS256"],
+                options={"verify_exp": True}
+            )
+        except (JWTError, Exception):
+            # If RS256 fails, try HS256 for development tokens
+            payload = jwt.decode(
+                token,
+                settings.secret_key,
+                algorithms=["HS256"],
+                options={"verify_exp": True}
+            )
         
         # Create and return JWTPayload object
         jwt_payload = JWTPayload(payload)
@@ -109,8 +118,8 @@ def create_access_token(
     additional_claims: Optional[Dict[str, Any]] = None
 ) -> str:
     """
-    Create a JWT access token (for local testing/development)
-    Note: In production, tokens should come from the one-click trading service
+    Create a JWT access token for development/testing
+    Uses HS256 for simplicity in development
     
     Args:
         subject: User ID or identifier
@@ -137,8 +146,7 @@ def create_access_token(
     if additional_claims:
         to_encode.update(additional_claims)
     
-    # Note: This uses HS256 for local tokens
-    # Production tokens from trading service use RS256
+    # Use HS256 for development tokens
     encoded_jwt = jwt.encode(
         to_encode,
         settings.secret_key,

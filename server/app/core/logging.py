@@ -4,7 +4,7 @@ import sys
 import json
 import traceback
 from datetime import datetime
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional
 from pathlib import Path
 from contextvars import ContextVar
 from logging.handlers import RotatingFileHandler

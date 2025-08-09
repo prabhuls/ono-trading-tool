@@ -2,7 +2,7 @@
 User schemas for request/response validation
 """
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, EmailStr, Field, validator
 
 

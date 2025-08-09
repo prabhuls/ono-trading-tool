@@ -1,15 +1,12 @@
 import httpx
 import asyncio
 import time
-from typing import Dict, Any, Optional, Union, Callable, TypeVar, Generic, cast
+from typing import Dict, Any, Optional, TypeVar, Generic
 from abc import ABC, abstractmethod
-from functools import wraps
-from datetime import datetime, timedelta
-import json
-from urllib.parse import urljoin, urlencode
+from urllib.parse import urljoin
 
 from app.core.logging import get_logger
-from app.core.cache import cache, cache_manager
+from app.core.cache import cache_manager
 from app.core.monitoring import monitor_performance, ErrorMonitoring
 from app.core.config import settings
 

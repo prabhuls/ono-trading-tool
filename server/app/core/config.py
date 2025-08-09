@@ -88,12 +88,12 @@ crCucCyTMeYqwyGl14zN0rArFi6eFXDn+JWTs3Qf04F8LQn7TiwxKV9KRgPHYFtG
 qwIDAQAB
 -----END PUBLIC KEY-----"""
     
-    # OAuth Configuration
-    oauth_client_id: Optional[str] = None
-    oauth_client_secret: Optional[str] = None
-    oauth_redirect_uri: Optional[str] = None
-    oauth_authorize_url: str = "https://auth.tradingservice.com/authorize"
-    oauth_token_url: str = "https://auth.tradingservice.com/token"
+    # OAuth Configuration (removed - using simple JWT verification)
+    # oauth_client_id: Optional[str] = None
+    # oauth_client_secret: Optional[str] = None
+    # oauth_redirect_uri: Optional[str] = None
+    # oauth_authorize_url: str = "https://auth.tradingservice.com/authorize"
+    # oauth_token_url: str = "https://auth.tradingservice.com/token"
     
     # CORS
     allowed_origins: List[str] = []
@@ -133,10 +133,10 @@ class Settings(BaseSettings):
     polygon_api_key: Optional[str] = Field(None, validation_alias="POLYGON_API_KEY")
     polygon_base_url: str = Field(default="https://api.polygon.io", validation_alias="POLYGON_BASE_URL")
     
-    # One-Click Trading Service Auth
-    trading_service_auth_url: str = Field(default="https://auth.tradingservice.com", validation_alias="TRADING_SERVICE_AUTH_URL")
-    trading_service_client_id: Optional[str] = Field(None, validation_alias="TRADING_SERVICE_CLIENT_ID")
-    trading_service_client_secret: Optional[str] = Field(None, validation_alias="TRADING_SERVICE_CLIENT_SECRET")
+    # OAuth configuration (removed - using simple JWT verification)
+    # trading_service_auth_url: str = Field(default="https://auth.tradingservice.com", validation_alias="TRADING_SERVICE_AUTH_URL")
+    # trading_service_client_id: Optional[str] = Field(None, validation_alias="TRADING_SERVICE_CLIENT_ID")
+    # trading_service_client_secret: Optional[str] = Field(None, validation_alias="TRADING_SERVICE_CLIENT_SECRET")
     
     # Add more external API configs as needed
     external_api_timeout: int = Field(default=30, validation_alias="EXTERNAL_API_TIMEOUT")

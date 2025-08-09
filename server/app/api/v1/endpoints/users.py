@@ -1,16 +1,15 @@
 """
 User management endpoints demonstrating SQLAlchemy usage
 """
-from typing import List, Optional
+from typing import Optional
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from passlib.context import CryptContext  # type: ignore[import-untyped]
 
 from app.core.dependencies import get_db, require_database
-from app.core.responses import create_success_response, create_error_response
+from app.core.responses import create_success_response
 from app.core.cache import cache, cache_manager
 from app.models.user import User
 from app.utils.database import DatabaseCRUD, PaginationParams

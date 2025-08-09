@@ -3,7 +3,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 from fastapi import status
 from fastapi.responses import JSONResponse
-from fastapi.encoders import jsonable_encoder
 
 from .logging import get_logger, request_id_var
 
@@ -107,7 +106,7 @@ def create_success_response(
     Returns:
         JSONResponse with standardized format
     """
-    response = SuccessResponse(
+    response: SuccessResponse = SuccessResponse(
         data=data,
         message=message,
         metadata=metadata,

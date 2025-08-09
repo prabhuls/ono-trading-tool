@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Query, Path, Body, Depends, HTTPException
+from fastapi import APIRouter, Query, Path, Body, HTTPException
 from fastapi.responses import JSONResponse
-from typing import Dict, Any, List, Optional
+from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from app.core.responses import (

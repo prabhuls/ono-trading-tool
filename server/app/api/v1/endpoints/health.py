@@ -1,6 +1,5 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-from typing import Dict, Any
 
 from app.core.responses import create_success_response
 from app.core.cache import cache_manager

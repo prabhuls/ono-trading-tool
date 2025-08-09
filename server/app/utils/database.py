@@ -2,9 +2,8 @@
 Database utility functions for common operations
 """
 from typing import TypeVar, Type, Generic, List, Optional, Dict, Any
-from uuid import UUID
 
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel, ConfigDict

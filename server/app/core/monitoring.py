@@ -9,6 +9,7 @@ from enum import Enum
 import time
 from functools import wraps
 import asyncio
+import logging
 
 from .config import settings
 from .logging import get_logger, request_id_var, user_id_var
@@ -444,7 +445,3 @@ def capture_errors(
                     
         return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
     return decorator
-
-
-# Import logging to make LoggingIntegration work
-import logging

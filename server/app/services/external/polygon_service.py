@@ -49,7 +49,7 @@ class PolygonService(ExternalAPIService):
             data = response.json()
             # Polygon typically returns errors in 'error' or 'message' fields
             return data.get("error", data.get("message", "Unknown error"))
-        except:
+        except Exception:
             return response.text or "Unknown error"
             
     async def get_ticker_details(self, ticker: str) -> Dict[str, Any]:

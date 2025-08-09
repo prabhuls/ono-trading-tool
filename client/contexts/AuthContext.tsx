@@ -3,15 +3,13 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { AuthService, User, AuthState } from "@/lib/auth";
-import { ApiClient } from "@/lib/api";
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   subscriptions: Record<string, boolean | unknown>;
-  login: () => void;
-  logout: () => Promise<void>;
+  setToken: (token: string) => void;
   checkSubscription: (subscriptionName: string) => boolean;
   refreshAuth: () => Promise<void>;
 }
@@ -43,27 +41,42 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       try {
+        // Check if token is in URL (from One Click Trading)
+        const urlParams = new URLSearchParams(window.location.search);
+        const tokenFromUrl = urlParams.get("token");
+        
+        if (tokenFromUrl) {
+          // Store the token and clean URL
+          AuthService.setToken(tokenFromUrl);
+          const newUrl = window.location.pathname;
+          window.history.replaceState({}, document.title, newUrl);
+        }
+        
         const token = AuthService.getToken();
         if (token) {
           // Verify token with backend
           const isValid = await AuthService.verifyToken();
           if (isValid) {
-            const user = await AuthService.getCurrentUser();
-            if (user) {
+            // Decode token to get user info
+            const payload = AuthService.decodeToken(token);
+            if (payload) {
+              const user: User = {
+                id: (payload.sub as string) || (payload.user_id as string) || "unknown",
+                email: (payload.email as string) || "unknown@example.com",
+                username: payload.username as string | undefined,
+                full_name: payload.full_name as string | undefined,
+                is_active: payload.is_active !== false,
+                is_verified: true,
+                subscriptions: (payload.subscriptions as Record<string, boolean | unknown>) || {},
+                created_at: new Date().toISOString(),
+              };
+              
+              AuthService.setStoredUser(user);
               setAuthState({
                 user,
                 isAuthenticated: true,
                 isLoading: false,
                 token,
-              });
-            } else {
-              // Token is valid but couldn't get user
-              AuthService.clearAuth();
-              setAuthState({
-                user: null,
-                isAuthenticated: false,
-                isLoading: false,
-                token: null,
               });
             }
           } else {
@@ -99,82 +112,84 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     initAuth();
   }, []);
 
-  // Handle OAuth callback
-  useEffect(() => {
-    const handleCallback = async () => {
-      // Check if we're on the callback page
-      if (typeof window !== "undefined" && window.location.pathname === "/auth/callback") {
-        const urlParams = new URLSearchParams(window.location.search);
-        const code = urlParams.get("code");
-        
-        if (code) {
-          try {
-            const authData = await AuthService.handleOAuthCallback(code);
-            if (authData) {
-              setAuthState({
-                user: authData.user,
-                isAuthenticated: true,
-                isLoading: false,
-                token: authData.access_token,
-              });
-              
-              // Redirect to dashboard or home
-              router.push("/dashboard");
-            }
-          } catch (error) {
-            console.error("OAuth callback error:", error);
-            router.push("/login?error=auth_failed");
-          }
-        }
-      }
-    };
-
-    handleCallback();
-  }, [router]);
-
-  const login = useCallback(() => {
-    AuthService.initiateLogin();
+  const setToken = useCallback((token: string) => {
+    AuthService.setExternalToken(token);
+    
+    // Decode token to get user info
+    const payload = AuthService.decodeToken(token);
+    if (payload) {
+      const user: User = {
+        id: (payload.sub as string) || (payload.user_id as string) || "unknown",
+        email: (payload.email as string) || "unknown@example.com",
+        username: payload.username as string | undefined,
+        full_name: payload.full_name as string | undefined,
+        is_active: payload.is_active !== false,
+        is_verified: true,
+        subscriptions: (payload.subscriptions as Record<string, boolean | unknown>) || {},
+        created_at: new Date().toISOString(),
+      };
+      
+      AuthService.setStoredUser(user);
+      setAuthState({
+        user,
+        isAuthenticated: true,
+        isLoading: false,
+        token,
+      });
+    }
   }, []);
 
-  const logout = useCallback(async () => {
-    try {
-      await AuthService.logout();
+
+  const checkSubscription = useCallback((subscriptionName: string): boolean => {
+    if (!authState.user) return false;
+    const subscriptions = authState.user.subscriptions || {};
+    return subscriptions[subscriptionName] === true;
+  }, [authState.user]);
+
+  const refreshAuth = useCallback(async () => {
+    const token = AuthService.getToken();
+    if (!token) {
       setAuthState({
         user: null,
         isAuthenticated: false,
         isLoading: false,
         token: null,
       });
-      router.push("/");
-    } catch (error) {
-      console.error("Logout error:", error);
+      return;
     }
-  }, [router]);
 
-  const checkSubscription = useCallback((subscriptionName: string): boolean => {
-    if (!authState.user?.subscriptions) return false;
-    return authState.user.subscriptions[subscriptionName] === true;
-  }, [authState.user]);
-
-  const refreshAuth = useCallback(async () => {
     try {
-      setAuthState(prev => ({ ...prev, isLoading: true }));
-      
       const isValid = await AuthService.verifyToken();
       if (isValid) {
-        const user = await AuthService.getCurrentUser();
-        if (user) {
+        const payload = AuthService.decodeToken(token);
+        if (payload) {
+          const user: User = {
+            id: (payload.sub as string) || (payload.user_id as string) || "unknown",
+            email: (payload.email as string) || "unknown@example.com",
+            username: payload.username as string | undefined,
+            full_name: payload.full_name as string | undefined,
+            is_active: payload.is_active !== false,
+            is_verified: true,
+            subscriptions: (payload.subscriptions as Record<string, boolean | unknown>) || {},
+            created_at: new Date().toISOString(),
+          };
+          
+          AuthService.setStoredUser(user);
           setAuthState({
             user,
             isAuthenticated: true,
             isLoading: false,
-            token: AuthService.getToken(),
+            token,
           });
-        } else {
-          throw new Error("Failed to get user");
         }
       } else {
-        throw new Error("Token invalid");
+        AuthService.clearAuth();
+        setAuthState({
+          user: null,
+          isAuthenticated: false,
+          isLoading: false,
+          token: null,
+        });
       }
     } catch (error) {
       console.error("Auth refresh error:", error);
@@ -193,8 +208,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isAuthenticated: authState.isAuthenticated,
     isLoading: authState.isLoading,
     subscriptions: authState.user?.subscriptions || {},
-    login,
-    logout,
+    setToken,
     checkSubscription,
     refreshAuth,
   };
@@ -206,32 +220,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 export function withAuth<P extends object>(
   Component: React.ComponentType<P>,
   options?: {
-    redirectTo?: string;
     requiredSubscription?: string;
+    redirectTo?: string;
   }
-): React.ComponentType<P> {
+) {
   return function AuthenticatedComponent(props: P) {
     const { isAuthenticated, isLoading, checkSubscription } = useAuth();
     const router = useRouter();
 
     useEffect(() => {
-      if (!isLoading && !isAuthenticated) {
-        router.push(options?.redirectTo || "/login");
-      }
-
-      if (!isLoading && isAuthenticated && options?.requiredSubscription) {
-        if (!checkSubscription(options.requiredSubscription)) {
+      if (!isLoading) {
+        if (!isAuthenticated) {
+          router.push(options?.redirectTo || "/login");
+        } else if (options?.requiredSubscription && !checkSubscription(options.requiredSubscription)) {
           router.push("/subscription-required");
         }
       }
-    }, [isAuthenticated, isLoading, router]);
+    }, [isAuthenticated, isLoading, checkSubscription, router]);
 
     if (isLoading) {
-      return (
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-        </div>
-      );
+      return <div>Loading...</div>;
     }
 
     if (!isAuthenticated) {

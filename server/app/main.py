@@ -1,11 +1,10 @@
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from contextlib import asynccontextmanager
 import time
-import uuid
 
 from app.core.config import settings
 from app.core.logging import get_logger, set_request_id, clear_context, generate_request_id
@@ -287,8 +286,6 @@ async def health_check():
             **settings.features
         }
     }
-    
-    status_code = status.HTTP_200_OK if is_healthy else status.HTTP_503_SERVICE_UNAVAILABLE
     
     return health_data
 
