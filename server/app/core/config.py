@@ -151,6 +151,9 @@ class Settings(BaseSettings):
     sentry_profiles_sample_rate: float = Field(default=0.1, validation_alias="SENTRY_PROFILES_SAMPLE_RATE")
     sentry_environment: Optional[str] = Field(None, validation_alias="SENTRY_ENVIRONMENT")
     
+    # Authentication
+    enable_auth: bool = Field(default=True, validation_alias="ENABLE_AUTH")
+    
     # Feature Flags
     features: Dict[str, bool] = {
         "enable_websockets": True,

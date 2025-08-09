@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.security import create_access_token, JWTPayload
-from app.core.auth import get_current_user_jwt
+from app.core.auth import conditional_jwt_token
 from app.core.responses import create_success_response
 
 logger = get_logger(__name__)
@@ -15,7 +15,7 @@ router = APIRouter()
 
 @router.post("/verify")
 async def verify_token(
-    jwt_payload: Optional[JWTPayload] = Depends(get_current_user_jwt)
+    jwt_payload: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ):
     """
     Verify current JWT token
@@ -44,7 +44,7 @@ async def verify_token(
 @router.get("/check-subscription/{subscription_name}")
 async def check_subscription(
     subscription_name: str,
-    jwt_payload: Optional[JWTPayload] = Depends(get_current_user_jwt)
+    jwt_payload: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ):
     """
     Check if user has a specific subscription
