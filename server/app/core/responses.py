@@ -3,7 +3,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 from fastapi import status
 from fastapi.responses import JSONResponse
-from fastapi.encoders import jsonable_encoder
 
 from .logging import get_logger, request_id_var
 
@@ -45,7 +44,7 @@ class ErrorResponse(BaseResponse[None]):
     
     def build_error(self) -> Dict[str, Any]:
         """Build error object"""
-        error_obj = {
+        error_obj: Dict[str, Any] = {
             "code": self.error_code,
             "message": self.message,
         }
@@ -81,6 +80,7 @@ class PaginatedResponse(SuccessResponse[List[T]]):
                 "has_next": page < total_pages,
                 "has_prev": page > 1
             },
+            metadata=None,
             request_id=request_id_var.get()
         )
 
@@ -106,7 +106,7 @@ def create_success_response(
     Returns:
         JSONResponse with standardized format
     """
-    response = SuccessResponse(
+    response: SuccessResponse = SuccessResponse(
         data=data,
         message=message,
         metadata=metadata,
@@ -122,7 +122,7 @@ def create_success_response(
         "data": response.data,
         "metadata": response.metadata,
         "request_id": response.request_id,
-        "timestamp": response.timestamp.isoformat() if response.timestamp else None.isoformat() if response.timestamp else None
+        "timestamp": response.timestamp.isoformat() if response.timestamp else None
     }
     
     # Remove None values
@@ -159,6 +159,8 @@ def create_error_response(
         error_code=error_code,
         message=message,
         error_details=error_details,
+        error=None,
+        metadata=None,
         request_id=request_id_var.get()
     )
     

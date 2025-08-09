@@ -2,17 +2,19 @@
 Database utility functions for common operations
 """
 from typing import TypeVar, Type, Generic, List, Optional, Dict, Any
-from uuid import UUID
 
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.core.database import Base
-from app.core.logging import logger
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 T = TypeVar("T", bound=Base)
+P = TypeVar("P")
 
 
 class PaginationParams(BaseModel):
@@ -25,9 +27,11 @@ class PaginationParams(BaseModel):
         return (self.page - 1) * self.per_page
 
 
-class PaginatedResponse(BaseModel, Generic[T]):
+class PaginatedResponse(BaseModel, Generic[P]):
     """Paginated response model"""
-    items: List[T]
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    items: List[P]
     total: int
     page: int
     per_page: int
@@ -52,10 +56,10 @@ class DatabaseCRUD(Generic[T]):
         self,
         db: AsyncSession,
         id: Any,
-        load_relationships: List[str] = None
+        load_relationships: Optional[List[str]] = None
     ) -> Optional[T]:
         """Get a single record by ID"""
-        query = select(self.model).filter(self.model.id == id)
+        query = select(self.model).filter(self.model.id == id)  # type: ignore[attr-defined]
         
         if load_relationships:
             for rel in load_relationships:
@@ -70,9 +74,9 @@ class DatabaseCRUD(Generic[T]):
         *,
         skip: int = 0,
         limit: int = 100,
-        filters: Dict[str, Any] = None,
-        order_by: str = None,
-        load_relationships: List[str] = None
+        filters: Optional[Dict[str, Any]] = None,
+        order_by: Optional[str] = None,
+        load_relationships: Optional[List[str]] = None
     ) -> List[T]:
         """Get multiple records with optional filtering"""
         query = select(self.model)
@@ -99,15 +103,15 @@ class DatabaseCRUD(Generic[T]):
         query = query.offset(skip).limit(limit)
         
         result = await db.execute(query)
-        return result.scalars().all()
+        return list(result.scalars().all())
     
     async def get_paginated(
         self,
         db: AsyncSession,
         pagination: PaginationParams,
-        filters: Dict[str, Any] = None,
-        order_by: str = None,
-        load_relationships: List[str] = None
+        filters: Optional[Dict[str, Any]] = None,
+        order_by: Optional[str] = None,
+        load_relationships: Optional[List[str]] = None
     ) -> PaginatedResponse[T]:
         """Get paginated records"""
         # Get total count
@@ -131,11 +135,11 @@ class DatabaseCRUD(Generic[T]):
         )
         
         # Calculate pages
-        pages = (total + pagination.per_page - 1) // pagination.per_page
+        pages = (total + pagination.per_page - 1) // pagination.per_page if total else 0
         
         return PaginatedResponse(
             items=items,
-            total=total,
+            total=total or 0,
             page=pagination.page,
             per_page=pagination.per_page,
             pages=pages
@@ -188,7 +192,7 @@ class DatabaseCRUD(Generic[T]):
     async def count(
         self,
         db: AsyncSession,
-        filters: Dict[str, Any] = None
+        filters: Optional[Dict[str, Any]] = None
     ) -> int:
         """Count records with optional filtering"""
         query = select(func.count()).select_from(self.model)
@@ -199,7 +203,7 @@ class DatabaseCRUD(Generic[T]):
                     query = query.filter(getattr(self.model, key) == value)
         
         result = await db.execute(query)
-        return result.scalar()
+        return result.scalar() or 0
     
     async def exists(
         self,
@@ -207,7 +211,7 @@ class DatabaseCRUD(Generic[T]):
         **kwargs
     ) -> bool:
         """Check if a record exists with given criteria"""
-        query = select(self.model.id)
+        query = select(self.model.id)  # type: ignore[attr-defined]
         
         for key, value in kwargs.items():
             if hasattr(self.model, key):
@@ -222,7 +226,7 @@ class DatabaseCRUD(Generic[T]):
 async def get_or_create(
     db: AsyncSession,
     model: Type[T],
-    defaults: Dict[str, Any] = None,
+    defaults: Optional[Dict[str, Any]] = None,
     **kwargs
 ) -> tuple[T, bool]:
     """Get an existing object or create a new one"""
@@ -282,7 +286,7 @@ async def bulk_update(
             continue
         
         obj_id = update.pop('id')
-        query = select(model).filter(model.id == obj_id)
+        query = select(model).filter(model.id == obj_id)  # type: ignore[attr-defined]
         result = await db.execute(query)
         obj = result.scalar_one_or_none()
         

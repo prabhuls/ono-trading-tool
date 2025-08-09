@@ -1,15 +1,12 @@
 import httpx
 import asyncio
 import time
-from typing import Dict, Any, Optional, Union, Callable, TypeVar, Generic
+from typing import Dict, Any, Optional, TypeVar, Generic
 from abc import ABC, abstractmethod
-from functools import wraps
-from datetime import datetime, timedelta
-import json
-from urllib.parse import urljoin, urlencode
+from urllib.parse import urljoin
 
 from app.core.logging import get_logger
-from app.core.cache import cache, cache_manager
+from app.core.cache import cache_manager
 from app.core.monitoring import monitor_performance, ErrorMonitoring
 from app.core.config import settings
 
@@ -99,8 +96,8 @@ class ExternalAPIService(ABC, Generic[T]):
             follow_redirects=True
         )
         
-        # Metrics
-        self.metrics = {
+        # Metrics - using Any to avoid complex type casting
+        self.metrics: Dict[str, Any] = {
             "total_requests": 0,
             "successful_requests": 0,
             "failed_requests": 0,
@@ -232,7 +229,7 @@ class ExternalAPIService(ABC, Generic[T]):
         )
         
         # Retry loop
-        last_exception = None
+        last_exception: Optional[Exception] = None
         for attempt in range(self.max_retries):
             start_time = time.time()
             
@@ -325,7 +322,7 @@ class ExternalAPIService(ABC, Generic[T]):
                 
                 self.logger.error(
                     f"Network error calling {self.service_name}",
-                    error=str(e),
+                    error=e,
                     attempt=attempt + 1
                 )
                 
@@ -346,7 +343,7 @@ class ExternalAPIService(ABC, Generic[T]):
                 last_exception = e
                 self.logger.error(
                     f"Unexpected error calling {self.service_name}",
-                    error=str(e),
+                    error=e,
                     error_type=type(e).__name__
                 )
                 break

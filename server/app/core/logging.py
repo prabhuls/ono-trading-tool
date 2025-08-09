@@ -1,9 +1,10 @@
 import logging
+from logging import Formatter, LogRecord
 import sys
 import json
 import traceback
 from datetime import datetime
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional
 from pathlib import Path
 from contextvars import ContextVar
 from logging.handlers import RotatingFileHandler
@@ -18,10 +19,10 @@ user_id_var: ContextVar[Optional[str]] = ContextVar("user_id", default=None)
 correlation_id_var: ContextVar[Optional[str]] = ContextVar("correlation_id", default=None)
 
 
-class StructuredFormatter(logging.Formatter):
+class StructuredFormatter(Formatter):
     """Custom formatter that outputs structured JSON logs"""
     
-    def format(self, record: logging.LogRecord) -> str:
+    def format(self, record: LogRecord) -> str:
         # Get context variables
         request_id = request_id_var.get()
         user_id = user_id_var.get()
@@ -51,7 +52,7 @@ class StructuredFormatter(logging.Formatter):
             log_entry.update(record.extra_fields)
             
         # Add exception info if present
-        if record.exc_info:
+        if record.exc_info and record.exc_info[0]:
             log_entry["exception"] = {
                 "type": record.exc_info[0].__name__,
                 "message": str(record.exc_info[1]),
@@ -71,10 +72,10 @@ class StructuredFormatter(logging.Formatter):
         return json.dumps(log_entry)
 
 
-class TextFormatter(logging.Formatter):
+class TextFormatter(Formatter):
     """Human-readable formatter for development"""
     
-    def format(self, record: logging.LogRecord) -> str:
+    def format(self, record: LogRecord) -> str:
         # Get context variables
         request_id = request_id_var.get()
         

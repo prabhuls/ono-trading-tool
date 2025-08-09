@@ -1,9 +1,8 @@
 import json
 import hashlib
 import asyncio
-from typing import Any, Callable, Optional, Union, Dict, List, TypeVar
+from typing import Any, Callable, Optional, Dict, List, TypeVar
 from functools import wraps
-from datetime import timedelta
 import pickle
 import redis.asyncio as redis
 from redis.exceptions import RedisError
@@ -295,7 +294,7 @@ class CacheManager:
             
     async def clear_namespace(self, namespace: str) -> int:
         """Clear all cache in a namespace"""
-        pattern = f"*"
+        pattern = "*"
         return await self.delete_pattern(pattern, namespace)
         
     async def exists(

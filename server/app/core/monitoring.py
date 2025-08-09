@@ -1,14 +1,15 @@
-import sentry_sdk
-from sentry_sdk.integrations.fastapi import FastApiIntegration
-from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
-from sentry_sdk.integrations.redis import RedisIntegration
-from sentry_sdk.integrations.httpx import HttpxIntegration
-from sentry_sdk.integrations.logging import LoggingIntegration
+import sentry_sdk  # type: ignore[import-not-found]
+from sentry_sdk.integrations.fastapi import FastApiIntegration  # type: ignore[import-not-found]
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration  # type: ignore[import-not-found]
+from sentry_sdk.integrations.redis import RedisIntegration  # type: ignore[import-not-found]
+from sentry_sdk.integrations.httpx import HttpxIntegration  # type: ignore[import-not-found]
+from sentry_sdk.integrations.logging import LoggingIntegration  # type: ignore[import-not-found]
 from typing import Dict, Any, Optional, List
 from enum import Enum
 import time
 from functools import wraps
 import asyncio
+import logging
 
 from .config import settings
 from .logging import get_logger, request_id_var, user_id_var
@@ -298,7 +299,7 @@ class AlertManager:
         logger.warning(
             f"Alert sent: {title}",
             severity=severity.value,
-            message=message,
+            alert_message=message,
             context=context
         )
         
@@ -444,7 +445,3 @@ def capture_errors(
                     
         return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
     return decorator
-
-
-# Import logging to make LoggingIntegration work
-import logging

@@ -2,10 +2,10 @@
 User model for authentication and user management
 """
 from datetime import datetime
-from typing import List, TYPE_CHECKING
+from typing import List, TYPE_CHECKING, Dict, Any
 from uuid import uuid4
 
-from sqlalchemy import String, Boolean, DateTime, Text
+from sqlalchemy import String, Boolean, DateTime, Text, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -28,6 +28,15 @@ class User(Base):
         index=True
     )
     
+    # External authentication
+    external_auth_id: Mapped[str | None] = mapped_column(
+        String(255),
+        unique=True,
+        nullable=True,
+        index=True,
+        comment="User ID from external auth provider (trading service)"
+    )
+    
     # Authentication fields
     email: Mapped[str] = mapped_column(
         String(255),
@@ -48,6 +57,13 @@ class User(Base):
     
     # User information
     full_name: Mapped[str | None] = mapped_column(String(255))
+    
+    # Subscription data from trading service
+    subscription_data: Mapped[Dict[str, Any] | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="User's subscription data from trading service"
+    )
     
     # Account status
     is_active: Mapped[bool] = mapped_column(

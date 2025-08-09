@@ -1,16 +1,15 @@
 """
 User management endpoints demonstrating SQLAlchemy usage
 """
-from typing import List, Optional
+from typing import Optional
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from passlib.context import CryptContext
+from passlib.context import CryptContext  # type: ignore[import-untyped]
 
 from app.core.dependencies import get_db, require_database
-from app.core.responses import ResponseHandler
+from app.core.responses import create_success_response
 from app.core.cache import cache, cache_manager
 from app.models.user import User
 from app.utils.database import DatabaseCRUD, PaginationParams
@@ -22,7 +21,6 @@ from app.schemas.user import (
 )
 
 router = APIRouter()
-response_handler = ResponseHandler()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Create CRUD instance for User model
@@ -52,7 +50,7 @@ async def create_user(
     
     user = await user_crud.create(db, obj_in=user_data)
     
-    return response_handler.success(
+    return create_success_response(
         data=UserResponse.from_orm(user),
         message="User created successfully"
     )
@@ -81,7 +79,7 @@ async def list_users(
         order_by="-created_at"
     )
     
-    return response_handler.success(
+    return create_success_response(
         data={
             "items": [UserResponse.from_orm(user) for user in result.items],
             "pagination": {
@@ -99,7 +97,7 @@ async def list_users(
 
 @router.get("/{user_id}", response_model=UserResponse)
 @require_database
-@cache(ttl=300, namespace="users", key_builder=lambda user_id: f"user:{user_id}")
+@cache(ttl=300, namespace="users")
 async def get_user(
     user_id: str,
     db: AsyncSession = Depends(get_db)
@@ -114,7 +112,7 @@ async def get_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    return response_handler.success(
+    return create_success_response(
         data=UserResponse.from_orm(user),
         message="User retrieved successfully"
     )
@@ -148,7 +146,7 @@ async def update_user(
     # Invalidate cache
     await cache_manager.delete(f"user:{user_id}", namespace="users")
     
-    return response_handler.success(
+    return create_success_response(
         data=UserResponse.from_orm(user),
         message="User updated successfully"
     )
@@ -170,7 +168,7 @@ async def delete_user(
     await cache_manager.delete(f"user:{user_id}", namespace="users")
     await cache_manager.delete_pattern("*", namespace="users")
     
-    return response_handler.success(
+    return create_success_response(
         message="User deleted successfully"
     )
 
@@ -191,7 +189,7 @@ async def get_user_watchlists(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    return response_handler.success(
+    return create_success_response(
         data=[{
             "id": w.id,
             "name": w.name,

@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Query, Path, Body, Depends, HTTPException
-from typing import Dict, Any, List, Optional
+from fastapi import APIRouter, Query, Path, Body, HTTPException
+from fastapi.responses import JSONResponse
+from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from app.core.responses import (
@@ -51,7 +52,7 @@ async def list_items(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(50, ge=1, le=100, description="Items per page"),
     search: Optional[str] = Query(None, description="Search query")
-) -> Dict[str, Any]:
+) -> JSONResponse:
     """
     List items with pagination
     
@@ -92,7 +93,7 @@ async def list_items(
 @monitor_performance("api.get_item")
 async def get_item(
     item_id: str = Path(..., description="Item ID")
-) -> Dict[str, Any]:
+) -> JSONResponse:
     """
     Get a single item by ID
     
@@ -126,7 +127,7 @@ async def get_item(
 @capture_errors(level="warning")
 async def create_item(
     item: ExampleRequest = Body(..., description="Item to create")
-) -> Dict[str, Any]:
+) -> JSONResponse:
     """
     Create a new item
     
@@ -164,7 +165,7 @@ async def create_item(
 async def update_item(
     item_id: str = Path(..., description="Item ID"),
     item: ExampleRequest = Body(..., description="Updated item data")
-) -> Dict[str, Any]:
+) -> JSONResponse:
     """
     Update an existing item
     
@@ -197,7 +198,7 @@ async def update_item(
 @router.delete("/items/{item_id}")
 async def delete_item(
     item_id: str = Path(..., description="Item ID")
-) -> Dict[str, Any]:
+) -> JSONResponse:
     """
     Delete an item
     
@@ -226,7 +227,7 @@ async def delete_item(
 @router.post("/items/batch")
 async def process_batch(
     items: List[ExampleRequest] = Body(..., description="Items to process")
-) -> Dict[str, Any]:
+) -> JSONResponse:
     """
     Process multiple items in batch
     
@@ -289,7 +290,7 @@ async def process_batch(
 
 @router.get("/external-data")
 @cache(ttl=600, namespace="external_api")
-async def get_external_data() -> Dict[str, Any]:
+async def get_external_data() -> JSONResponse:
     """
     Example endpoint that calls external API
     
