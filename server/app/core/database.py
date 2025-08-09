@@ -160,8 +160,9 @@ class DatabaseManager:
             return False
             
         try:
+            from sqlalchemy import text
             async with engine.connect() as conn:
-                await conn.execute("SELECT 1")
+                await conn.execute(text("SELECT 1"))
             return True
         except Exception as e:
             logger.error(f"Database connection check failed: {e}")

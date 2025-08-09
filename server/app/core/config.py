@@ -73,9 +73,27 @@ class APIConfig(BaseModel):
 
 class SecurityConfig(BaseModel):
     """Security configuration"""
-    algorithm: str = "HS256"
+    algorithm: str = "RS256"  # Changed to RS256 for RSA public key verification
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
+    
+    # JWT RSA Public Key for verification (from one-click trading service)
+    jwt_public_key: str = """-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtSt0xH5N6SOVXY4E2h1X
+WE6edernQCmw2kfg6023C64hYR4PZH8XM2P9qoyAzq19UDJZbVj4hi/75GKHEFBC
+zL+SrJLgc/6jZoMpOYtEhDgzEKKdfFtgpGD18Idc5IyvBLeW2d8gvfIJMuxRUnT6
+K3spmisjdZtd+7bwMKPl6BGAsxZbhlkGjLI1gP/fHrdfU2uoL5okxbbzg1NH95xc
+LSXX2JJ+q//t8vLGy+zMh8HPqFM9ojsxzT97AiR7uZZPBvR6c/rX5GDIFPvo5QVr
+crCucCyTMeYqwyGl14zN0rArFi6eFXDn+JWTs3Qf04F8LQn7TiwxKV9KRgPHYFtG
+qwIDAQAB
+-----END PUBLIC KEY-----"""
+    
+    # OAuth Configuration
+    oauth_client_id: Optional[str] = None
+    oauth_client_secret: Optional[str] = None
+    oauth_redirect_uri: Optional[str] = None
+    oauth_authorize_url: str = "https://auth.tradingservice.com/authorize"
+    oauth_token_url: str = "https://auth.tradingservice.com/token"
     
     # CORS
     allowed_origins: List[str] = []
@@ -114,6 +132,11 @@ class Settings(BaseSettings):
     # External APIs
     polygon_api_key: Optional[str] = Field(None, validation_alias="POLYGON_API_KEY")
     polygon_base_url: str = Field(default="https://api.polygon.io", validation_alias="POLYGON_BASE_URL")
+    
+    # One-Click Trading Service Auth
+    trading_service_auth_url: str = Field(default="https://auth.tradingservice.com", validation_alias="TRADING_SERVICE_AUTH_URL")
+    trading_service_client_id: Optional[str] = Field(None, validation_alias="TRADING_SERVICE_CLIENT_ID")
+    trading_service_client_secret: Optional[str] = Field(None, validation_alias="TRADING_SERVICE_CLIENT_SECRET")
     
     # Add more external API configs as needed
     external_api_timeout: int = Field(default=30, validation_alias="EXTERNAL_API_TIMEOUT")
@@ -258,7 +281,7 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings() -> Settings:
     """Get cached settings instance"""
-    return Settings()
+    return Settings()  # type: ignore[call-arg]
 
 
 # Create a global settings instance

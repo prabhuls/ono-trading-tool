@@ -99,15 +99,20 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             
     def _extract_user_id(self, request: Request) -> Optional[str]:
         """
-        Extract user ID from request (implement based on your auth system)
+        Extract user ID from request using JWT token
         """
-        # Example: Extract from JWT token in Authorization header
+        from app.core.security import verify_jwt_token, extract_token_from_header
+        
         auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            # Decode JWT and extract user_id
-            # This is just a placeholder - implement actual JWT decoding
-            return None
-            
+        token = extract_token_from_header(auth_header)
+        
+        if token:
+            jwt_payload = verify_jwt_token(token)
+            if jwt_payload:
+                # Store JWT payload in request state for later use
+                request.state.jwt_payload = jwt_payload
+                return jwt_payload.user_id
+        
         return None
 
 

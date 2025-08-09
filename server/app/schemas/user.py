@@ -2,7 +2,7 @@
 User schemas for request/response validation
 """
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict, Any, Union
 from pydantic import BaseModel, EmailStr, Field, validator
 
 
@@ -54,8 +54,10 @@ class UserUpdate(BaseModel):
 class UserResponse(UserBase):
     """Schema for user response"""
     id: str
+    external_auth_id: Optional[str] = None
     is_verified: bool
     is_superuser: bool
+    subscription_data: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
     last_login_at: Optional[datetime] = None

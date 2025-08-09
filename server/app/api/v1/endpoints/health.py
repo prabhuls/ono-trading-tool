@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from typing import Dict, Any
 
 from app.core.responses import create_success_response
@@ -10,7 +11,7 @@ router = APIRouter()
 
 
 @router.get("")
-async def health_check() -> Dict[str, Any]:
+async def health_check() -> JSONResponse:
     """
     Detailed health check endpoint
     """
@@ -37,7 +38,7 @@ async def health_check() -> Dict[str, Any]:
 
 
 @router.get("/ready")
-async def readiness_check() -> Dict[str, Any]:
+async def readiness_check() -> JSONResponse:
     """
     Kubernetes readiness probe endpoint
     """
@@ -58,7 +59,7 @@ async def readiness_check() -> Dict[str, Any]:
 
 
 @router.get("/live")
-async def liveness_check() -> Dict[str, Any]:
+async def liveness_check() -> JSONResponse:
     """
     Kubernetes liveness probe endpoint
     """

@@ -261,6 +261,28 @@ export const api = {
     live: () => ApiClient.get("/api/v1/health/live"),
   },
   
+  // Auth endpoints
+  auth: {
+    login: (redirectUri?: string) => {
+      const params = redirectUri ? `?redirect_uri=${encodeURIComponent(redirectUri)}` : "";
+      return ApiClient.get(`/api/v1/auth/login${params}`);
+    },
+    callback: (code: string) => ApiClient.get(`/api/v1/auth/callback?code=${code}`),
+    verify: () => ApiClient.post("/api/v1/auth/verify"),
+    logout: () => ApiClient.post("/api/v1/auth/logout"),
+    user: () => ApiClient.get("/api/v1/auth/user"),
+    checkSubscription: (name: string) => ApiClient.get(`/api/v1/auth/check-subscription/${name}`),
+    refresh: () => ApiClient.post("/api/v1/auth/refresh"),
+    // Development only
+    createTestToken: (userId?: string, email?: string, includeSubscriptions?: boolean) => {
+      const params = new URLSearchParams();
+      if (userId) params.append("user_id", userId);
+      if (email) params.append("email", email);
+      if (includeSubscriptions !== undefined) params.append("include_subscriptions", String(includeSubscriptions));
+      return ApiClient.get(`/api/v1/auth/dev/create-test-token?${params.toString()}`);
+    },
+  },
+  
   // Example endpoints
   example: {
     list: (params?: { page?: number; page_size?: number; search?: string }) =>
@@ -272,9 +294,4 @@ export const api = {
   },
   
   // Add more API endpoints here
-  // auth: {
-  //   login: (credentials: LoginCredentials) => ApiClient.post("/api/v1/auth/login", credentials),
-  //   logout: () => ApiClient.post("/api/v1/auth/logout"),
-  //   refresh: () => ApiClient.post("/api/v1/auth/refresh"),
-  // },
 };

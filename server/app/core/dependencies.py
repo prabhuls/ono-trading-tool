@@ -91,3 +91,4 @@ class OptionalDatabase:
                 return session
         except RuntimeError:
             return None
+        return None
