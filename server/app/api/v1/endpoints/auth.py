@@ -10,7 +10,7 @@ from app.core.auth import get_current_user_jwt
 from app.core.responses import create_success_response
 
 logger = get_logger(__name__)
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+router = APIRouter()
 
 
 @router.post("/verify")
