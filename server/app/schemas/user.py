@@ -3,7 +3,7 @@ User schemas for request/response validation
 """
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class UserBase(BaseModel):
@@ -18,7 +18,8 @@ class UserCreate(UserBase):
     """Schema for creating a user"""
     password: str = Field(..., min_length=8)
     
-    @validator('password')
+    @field_validator('password')
+    @classmethod
     def validate_password(cls, v):
         """Ensure password meets complexity requirements"""
         if not any(char.isdigit() for char in v):
@@ -38,7 +39,8 @@ class UserUpdate(BaseModel):
     password: Optional[str] = Field(None, min_length=8)
     is_active: Optional[bool] = None
     
-    @validator('password')
+    @field_validator('password')
+    @classmethod
     def validate_password(cls, v):
         """Ensure password meets complexity requirements if provided"""
         if v is not None:
@@ -63,7 +65,7 @@ class UserResponse(UserBase):
     last_login_at: Optional[datetime] = None
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class UserListResponse(BaseModel):
