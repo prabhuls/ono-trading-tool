@@ -6,10 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/hooks/useAuth";
-
-import { SimpleStockChart } from "./SimpleStockChart";
-import { CreditSpreadAnalysis } from './CreditSpreadAnalysis';
-import { DetailedSpreadAnalysis } from './DetailedSpreadAnalysis';
 import { ComprehensiveCreditSpreadDisplay } from './ComprehensiveCreditSpreadDisplay';
 
 interface TodaysMover {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuthContext } from "@/contexts/AuthContext";
 
 interface LoginButtonProps {
   className?: string;
@@ -17,7 +17,7 @@ export const LoginButton: React.FC<LoginButtonProps> = ({
   token,
   children,
 }) => {
-  const { setToken } = useAuth();
+  const { setToken } = useAuthContext();
 
   const handleLogin = () => {
     if (token) {

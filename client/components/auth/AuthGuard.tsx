@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuthContext } from "@/contexts/AuthContext";
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -20,7 +20,7 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({
   redirectTo = "/login",
   fallback,
 }) => {
-  const { isAuthenticated, isLoading, checkSubscription } = useAuth();
+  const { isAuthenticated, isLoading, checkSubscription } = useAuthContext();
   const router = useRouter();
 
   useEffect(() => {
