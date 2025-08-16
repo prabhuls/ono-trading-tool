@@ -1,0 +1,196 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 5%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 5%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 5%;
+    --primary: 142 76% 43%;  /* Robinhood Green */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 142 76% 95%;  /* Light green accent */
+    --accent-foreground: 142 76% 25%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 87%;
+    --input: 0 0% 98%;
+    --ring: 142 76% 43%;
+    --radius: 0.75rem;
+
+    /* Chart colors - Robinhood style */
+    --chart-1: 142 76% 43%;  /* Robinhood Green */
+    --chart-2: 0 84% 60%;    /* Red for losses */
+    --chart-3: 0 0% 60%;     /* Gray for neutral */
+    --chart-4: 38 92% 50%;   /* Orange for warning */
+    --chart-5: 210 100% 50%; /* Blue for info */
+    --chart-grid: 0 0% 90%;  /* Light gray grid */
+    
+    /* Premium shadows */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    --shadow-vip: 0 0 20px 0 rgba(34, 197, 94, 0.15), 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  }
+
+  body {
+    background: linear-gradient(to bottom, #ffffff, #fafafa);
+    color: hsl(var(--foreground));
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  /* VIP Theme: Premium borders */
+  .border-vip {
+    border-width: 2px;
+    border-color: hsl(var(--border));
+  }
+  
+  .border-vip-thick {
+    border-width: 3px;
+    border-color: hsl(var(--border));
+  }
+  
+  /* Premium shadow effects */
+  .shadow-vip {
+    box-shadow: var(--shadow-vip);
+  }
+  
+  .shadow-premium {
+    box-shadow: 0 0 30px 0 rgba(0, 0, 0, 0.08), 0 10px 20px -5px rgba(0, 0, 0, 0.1);
+  }
+  
+  .shadow-card {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+  }
+  
+  .shadow-card-hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 4px 8px rgba(0, 0, 0, 0.06);
+  }
+  
+  /* Glass morphism effects */
+  .glass {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  
+  .glass-subtle {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  
+  /* Premium card styles */
+  .card-vip {
+    @apply bg-white rounded-xl border-vip shadow-card transition-all duration-200 hover:shadow-card-hover hover:scale-[1.02];
+  }
+  
+  /* Premium button styles */
+  .btn-robinhood {
+    @apply bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98];
+  }
+  
+  .btn-robinhood-outline {
+    @apply border-2 border-green-500 text-green-600 hover:bg-green-50 font-semibold py-3 px-6 rounded-lg transition-all duration-200 hover:shadow-md;
+  }
+  
+  /* Text gradient for premium feel */
+  .text-gradient {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  
+  /* Container with max width */
+  .container {
+    width: 100%;
+    max-width: 1280px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+@layer utilities {
+  /* Smooth animations */
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+  
+  .animate-scale-in {
+    animation: scaleIn 0.2s ease-out;
+  }
+  
+  /* Premium hover effects */
+  .hover-lift {
+    transition: all 0.2s ease-out;
+  }
+  
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  }
+  
+  /* Loading pulse for premium feel */
+  .pulse-green {
+    animation: pulseGreen 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  @keyframes slideUp {
+    from { 
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to { 
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  @keyframes scaleIn {
+    from { 
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to { 
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  
+  @keyframes pulseGreen {
+    0%, 100% {
+      opacity: 1;
+      box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
+    }
+    50% {
+      opacity: 0.9;
+      box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
+    }
+  }
+}
