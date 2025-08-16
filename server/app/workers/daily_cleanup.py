@@ -5,7 +5,7 @@ Cleans up records older than 7 days from archive
 """
 
 import logging
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from typing import Dict, List
 from sqlalchemy import select, delete, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,7 +65,7 @@ class DailyCleanupWorker:
             
             if existing:
                 # Update existing record with new timestamp
-                existing.last_seen_at = datetime.utcnow()
+                existing.last_seen_at = datetime.now(timezone.utc)
                 existing.mover_type = record.list_type
                 existing.current_price = record.last_price
                 existing.special_character = record.special_character
@@ -77,7 +77,7 @@ class DailyCleanupWorker:
                 # Insert new archive record
                 new_archive = Last7DaysMovers(
                     symbol=record.symbol,
-                    last_seen_at=datetime.utcnow(),
+                    last_seen_at=datetime.now(timezone.utc),
                     mover_type=record.list_type,
                     current_price=record.last_price,
                     special_character=record.special_character,
@@ -106,7 +106,7 @@ class DailyCleanupWorker:
                 passed_variability_check=mover.passed_variability_check,
                 special_character=mover.special_character,
                 added_date=date.today(),
-                last_updated=datetime.utcnow(),
+                last_updated=datetime.now(timezone.utc),
                 is_active=True
             )
             session.add(new_main)
@@ -120,7 +120,7 @@ class DailyCleanupWorker:
     
     async def clean_expired_archives(self, session: AsyncSession) -> int:
         """Remove archive records older than 7 days"""
-        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
         
         # Get count before deletion for logging
         result = await session.execute(
@@ -164,14 +164,14 @@ class DailyCleanupWorker:
             if status:
                 # Update existing record
                 status.daily_transfer_completed = success
-                status.transferred_at = datetime.utcnow()
+                status.transferred_at = datetime.now(timezone.utc)
                 status.records_transferred = self.transferred_count
             else:
                 # Create new record
                 new_status = TransferStatus(
                     transfer_date=transfer_date,
                     daily_transfer_completed=success,
-                    transferred_at=datetime.utcnow(),
+                    transferred_at=datetime.now(timezone.utc),
                     records_transferred=self.transferred_count
                 )
                 session.add(new_status)
@@ -184,7 +184,7 @@ class DailyCleanupWorker:
     
     async def run(self) -> Dict:
         """Execute the daily cleanup process"""
-        self.start_time = datetime.utcnow()
+        self.start_time = datetime.now(timezone.utc)
         logger.info("=" * 60)
         logger.info("Starting Daily Cleanup Worker")
         logger.info("=" * 60)
@@ -247,7 +247,7 @@ class DailyCleanupWorker:
                 # Commit all changes
                 await session.commit()
                 
-                execution_time = (datetime.utcnow() - self.start_time).total_seconds()
+                execution_time = (datetime.now(timezone.utc) - self.start_time).total_seconds()
                 
                 logger.info("=" * 60)
                 logger.info("Daily Cleanup Completed Successfully")
@@ -277,7 +277,7 @@ class DailyCleanupWorker:
                 return {
                     'success': False,
                     'error': str(e),
-                    'execution_time': (datetime.utcnow() - self.start_time).total_seconds()
+                    'execution_time': (datetime.now(timezone.utc) - self.start_time).total_seconds()
                 }
 
 
