@@ -76,3 +76,8 @@ command = "cd server && python run_commands/run_market_scanner.py"
 name = "market-scanner-closing"
 schedule = "0 21 * * 1-5"  # 4:00 PM EST on weekdays
 command = "cd server && python run_commands/run_market_scanner.py"
+
+[[crons]]
+name = "daily-cleanup"
+schedule = "0 22 * * *"  # 5:00 PM EST daily (22:00 UTC)
+command = "cd server && python run_commands/run_daily_cleanup.py"

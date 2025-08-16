@@ -7,6 +7,7 @@ from app.models.watchlist import Watchlist
 from app.models.stocks import Stock, HistoricalData, EMACache
 from app.models.movers import TodaysMover, MainList
 from app.models.trades import CreditSpread
+from app.models.archive import Last7DaysMovers, TransferStatus
 
 __all__ = [
     "User", 
@@ -17,5 +18,7 @@ __all__ = [
     "EMACache",
     "TodaysMover",
     "MainList",
-    "CreditSpread"
+    "CreditSpread",
+    "Last7DaysMovers",
+    "TransferStatus"
 ]
