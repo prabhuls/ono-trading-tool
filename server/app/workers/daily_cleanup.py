@@ -166,17 +166,13 @@ class DailyCleanupWorker:
                 status.daily_transfer_completed = success
                 status.transferred_at = datetime.utcnow()
                 status.records_transferred = self.transferred_count
-                status.records_archived = self.archived_count + self.updated_archive_count
-                status.records_cleaned = self.cleaned_count
             else:
                 # Create new record
                 new_status = TransferStatus(
                     transfer_date=transfer_date,
                     daily_transfer_completed=success,
                     transferred_at=datetime.utcnow(),
-                    records_transferred=self.transferred_count,
-                    records_archived=self.archived_count + self.updated_archive_count,
-                    records_cleaned=self.cleaned_count
+                    records_transferred=self.transferred_count
                 )
                 session.add(new_status)
             

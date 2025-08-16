@@ -64,16 +64,6 @@ class TransferStatus(Base):
         nullable=True,
         comment="Number of records transferred"
     )
-    records_archived: Mapped[Optional[int]] = mapped_column(
-        Integer,
-        nullable=True,
-        comment="Number of records added to 7-day archive"
-    )
-    records_cleaned: Mapped[Optional[int]] = mapped_column(
-        Integer,
-        nullable=True,
-        comment="Number of expired records removed from archive"
-    )
     
     def __repr__(self) -> str:
         return f"<TransferStatus(date={self.transfer_date}, completed={self.daily_transfer_completed})>"
