@@ -420,3 +420,4 @@ htmlcov/
 CLAUDE.md.local
 
 !client/lib/
+!client2/lib/
