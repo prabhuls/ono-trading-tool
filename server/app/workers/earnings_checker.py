@@ -6,6 +6,7 @@ Updates upcoming_earnings flag for stocks with earnings within 14 days
 
 import logging
 import yfinance as yf
+import time
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from sqlalchemy import select, update, and_
@@ -35,8 +36,8 @@ class EarningsChecker:
         )
         return result.scalars().all()
     
-    def fetch_earnings_date(self, symbol: str) -> Optional[datetime]:
-        """Fetch next earnings date from yfinance"""
+    def fetch_earnings_date(self, symbol: str, retry_count: int = 0, max_retries: int = 3) -> Optional[datetime]:
+        """Fetch next earnings date from yfinance with retry logic for rate limiting"""
         try:
             ticker = yf.Ticker(symbol)
             
@@ -88,6 +89,15 @@ class EarningsChecker:
             return None
             
         except Exception as e:
+            # Check if it's a rate limit error (429) and retry if possible
+            error_str = str(e)
+            if ('429' in error_str or 'Too Many Requests' in error_str) and retry_count < max_retries:
+                # Exponential backoff: 2, 4, 8 seconds
+                wait_time = 2 ** (retry_count + 1)
+                logger.warning(f"Rate limited on {symbol}, retrying in {wait_time} seconds (attempt {retry_count + 1}/{max_retries})...")
+                time.sleep(wait_time)
+                return self.fetch_earnings_date(symbol, retry_count + 1, max_retries)
+            
             logger.error(f"Error fetching earnings for {symbol}: {e}")
             return None
     
@@ -146,6 +156,9 @@ class EarningsChecker:
         async for session in get_async_session():
             for mover in movers:
                 try:
+                    # Add delay to avoid Yahoo Finance rate limiting (429 errors)
+                    time.sleep(1)  # 1 second delay between requests
+                    
                     # Fetch earnings date
                     earnings_date = self.fetch_earnings_date(mover.symbol)
                     has_upcoming = self.has_upcoming_earnings(earnings_date)
