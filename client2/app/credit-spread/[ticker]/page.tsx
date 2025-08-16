@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ComprehensiveCreditSpreadDisplay } from '@/components/ComprehensiveCreditSpreadDisplay';
-import { useAuth } from '@/lib/hooks/useAuth';
+import { useAuth } from "@/lib/hooks/useAuth";
 
 export default function CreditSpreadAnalysisPage() {
   const params = useParams();
