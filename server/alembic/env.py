@@ -29,7 +29,12 @@ from app.core.database import Base
 from app.core.config import settings
 
 # Import all models to ensure they're registered with Base.metadata
-from app.models import User, APIKey, Watchlist
+from app.models import (
+    User, APIKey, Watchlist,
+    Stock, HistoricalData, EMACache,
+    TodaysMover, MainList,
+    CreditSpread
+)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

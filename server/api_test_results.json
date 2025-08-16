@@ -1,0 +1,74 @@
+[
+  {
+    "endpoint": "Highs/Lows CSV",
+    "url": "https://api.thetradelist.com/v1/data/get_highs_lows.php/",
+    "status": "SUCCESS",
+    "status_code": 200,
+    "response_type": "text/html; charset=UTF-8",
+    "error": null,
+    "sample_data": "symbol,year_high\nACWX,63.03000\nALNY,449.52000"
+  },
+  {
+    "endpoint": "Quote",
+    "url": "https://api.thetradelist.com/v1/data/get_quote.php/",
+    "status": "FAILED",
+    "status_code": 404,
+    "response_type": null,
+    "error": "HTTP 404: <!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n<html><head>\n<title>404 Not Found</title>\n</head><body>\n<h1>Not Found</h1>\n<p>The requested URL was not found on this server.</p>\n<hr>\n<address>Apach",
+    "sample_data": null
+  },
+  {
+    "endpoint": "Stock Info",
+    "url": "https://api.thetradelist.com/v1/data/get_stock_info.php/",
+    "status": "FAILED",
+    "status_code": 404,
+    "response_type": null,
+    "error": "HTTP 404: <!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n<html><head>\n<title>404 Not Found</title>\n</head><body>\n<h1>Not Found</h1>\n<p>The requested URL was not found on this server.</p>\n<hr>\n<address>Apach",
+    "sample_data": null
+  },
+  {
+    "endpoint": "Polygon Historical",
+    "url": "https://api.thetradelist.com/v1/data/get_polygon.php/ticker/AAPL/range/1/day/2024-01-15/2025-08-15",
+    "status": "SUCCESS",
+    "status_code": 200,
+    "response_type": "text/html; charset=UTF-8",
+    "error": null,
+    "sample_data": "{\"ticker\":\"AAPL\",\"queryCount\":398,\"resultsCount\":398,\"adjusted\":true,\"results\":[{\"v\":33312710,\"vw\":231.8075,\"o\":234,\"c\":230.71,\"h\":234.28,\"l\":229.335,\"t\":1755230400000,\"n\":33312710},{\"v\":51916200,\"vw\":232.985,\"o\":234.05,\"c\":232.78,\"h\":235.12,\"l\":230.85,\"t\":1755144000000,\"n\":51916200},{\"v\":69878500,\"vw\":232.715,\"o\":231.07,\"c\":233.33,\"h\":235,\"l\":230.43,\"t\":1755057600000,\"n\":69878500},{\"v\":55672300,\"vw\":228.935,\"o\":228.01,\"c\":229.65,\"h\":230.8,\"l\":227.07,\"t\":1754971200000,\"n\":55672300},{\"v\":61806100"
+  },
+  {
+    "endpoint": "Options Contracts",
+    "url": "https://api.thetradelist.com/v1/data/options-contracts",
+    "status": "SUCCESS",
+    "status_code": 200,
+    "response_type": "application/json",
+    "error": null,
+    "sample_data": "{\n  \"results\": [\n    {\n      \"cfi\": \"OCASPS\",\n      \"contract_type\": \"call\",\n      \"exercise_style\": \"american\",\n      \"expiration_date\": \"2025-08-15\",\n      \"primary_exchange\": \"BATO\",\n      \"shares_per_contract\": 100,\n      \"strike_price\": 90,\n      \"ticker\": \"O:AAPL250815C00090000\",\n      \"underlying_ticker\": \"AAPL\"\n    },\n    {\n      \"cfi\": \"OCASPS\",\n      \"contract_type\": \"call\",\n      \"exercise_style\": \"american\",\n      \"expiration_date\": \"2025-08-15\",\n      \"primary_exchange\": \"BATO\",\n   "
+  },
+  {
+    "endpoint": "Last Quote (Options)",
+    "url": "https://api.thetradelist.com/v1/data/last-quote",
+    "status": "SUCCESS",
+    "status_code": 200,
+    "response_type": "application/json",
+    "error": null,
+    "sample_data": "{\n  \"results\": [],\n  \"status\": \"DELAYED\",\n  \"request_id\": \"ce07d2207454d99cef07802adaa9702e\"\n}"
+  },
+  {
+    "endpoint": "Highs/Lows (no slash)",
+    "url": "https://api.thetradelist.com/v1/data/get_highs_lows.php",
+    "status": "SUCCESS",
+    "status_code": 200,
+    "response_type": "text/html; charset=UTF-8",
+    "error": null,
+    "sample_data": "symbol,year_low\nDOG,25.03000\nDXD,23.24000"
+  },
+  {
+    "endpoint": "Highs/Lows JSON",
+    "url": "https://api.thetradelist.com/v1/data/get_highs_lows.php/",
+    "status": "SUCCESS",
+    "status_code": 200,
+    "response_type": "application/json",
+    "error": null,
+    "sample_data": "[\n  {\n    \"symbol\": \"ACWX\",\n    \"year_high\": \"63.03000\"\n  },\n  {\n    \"symbol\": \"ALNY\",\n    \"year_high\": \"449.52000\"\n  },\n  {\n    \"symbol\": \"ALV\",\n    \"year_high\": \"119.53000\"\n  },\n  {\n    \"symbol\": \"AVDE\",\n    \"year_high\": \"77.06000\"\n  },\n  {\n    \"symbol\": \"AVDV\",\n    \"year_high\": \"84.50000\"\n  },\n  {\n    \"symbol\": \"BBJP\",\n    \"year_high\": \"66.26000\"\n  },\n  {\n    \"symbol\": \"BE\",\n    \"year_high\": \"47.20990\"\n  },\n  {\n    \"symbol\": \"BOXX\",\n    \"year_high\": \"113.26000\"\n  },\n  {\n    \"symbol\": \"BUFR\",\n"
+  }
+]

@@ -1,0 +1,78 @@
+# Railway Monorepo Configuration
+# This file configures the deployment of both backend and frontend services
+
+[build]
+builder = "nixpacks"
+buildCommand = "echo 'Monorepo build initiated'"
+
+# Backend Service Configuration
+[[services]]
+name = "backend"
+source = "server"
+builder = "dockerfile"
+dockerfilePath = "server/Dockerfile"
+
+[services.deploy]
+runtime = "V2"
+numReplicas = 1
+sleepApplication = false
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+
+[[services.envs]]
+name = "PORT"
+value = "8000"
+
+[[services.envs]]
+name = "ENVIRONMENT"
+value = "production"
+
+# Frontend Service Configuration
+[[services]]
+name = "frontend"
+source = "client"
+builder = "dockerfile"
+dockerfilePath = "client/Dockerfile"
+
+[services.deploy]
+runtime = "V2"
+numReplicas = 1
+sleepApplication = false
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+[[services.envs]]
+name = "PORT"
+value = "3000"
+
+[[services.envs]]
+name = "NODE_ENV"
+value = "production"
+
+# CRON Jobs Configuration
+[[crons]]
+name = "earnings-checker"
+schedule = "0 2 * * *"  # Daily at 2 AM UTC
+command = "cd server && python run_commands/run_earnings_check.py"
+
+[[crons]]
+name = "credit-spreads-scanner"
+schedule = "0 */4 * * *"  # Every 4 hours
+command = "cd server && python run_commands/run_credit_spreads.py"
+
+[[crons]]
+name = "market-scanner-opening"
+schedule = "30 14 * * 1-5"  # 9:30 AM EST on weekdays
+command = "cd server && python run_commands/run_market_scanner.py"
+
+[[crons]]
+name = "market-scanner-midday"
+schedule = "0 17 * * 1-5"  # 12:00 PM EST on weekdays
+command = "cd server && python run_commands/run_market_scanner.py"
+
+[[crons]]
+name = "market-scanner-closing"
+schedule = "0 21 * * 1-5"  # 4:00 PM EST on weekdays
+command = "cd server && python run_commands/run_market_scanner.py"

@@ -1,0 +1,86 @@
+# Railway CRON Configuration for CashFlowAgent VIP Backend Workers
+# Deploy this file to Railway to schedule automated tasks
+
+# Earnings Check - Daily at 2 AM UTC
+[[jobs]]
+name = "Earnings Check"
+schedule = "0 2 * * *"  # Daily at 2 AM UTC
+command = "python run_commands/run_earnings_check.py"
+
+# Credit Spreads Scanner - Every 4 hours
+[[jobs]]
+name = "Credit Spreads Scanner"
+schedule = "0 */4 * * *"  # Every 4 hours
+command = "python run_commands/run_credit_spreads.py"
+
+# Market Scanner - Every 30 minutes during market hours (weekdays)
+# Market hours: 9:30 AM - 4:00 PM EST (14:30 - 21:00 UTC)
+[[jobs]]
+name = "Market Scanner - Opening"
+schedule = "30 14 * * 1-5"  # 9:30 AM EST on weekdays
+command = "python run_commands/run_market_scanner.py"
+
+[[jobs]]
+name = "Market Scanner - 10 AM"
+schedule = "0 15 * * 1-5"  # 10:00 AM EST on weekdays
+command = "python run_commands/run_market_scanner.py"
+
+[[jobs]]
+name = "Market Scanner - 10:30 AM"
+schedule = "30 15 * * 1-5"  # 10:30 AM EST on weekdays
+command = "python run_commands/run_market_scanner.py"
+
+[[jobs]]
+name = "Market Scanner - 11 AM"
+schedule = "0 16 * * 1-5"  # 11:00 AM EST on weekdays
+command = "python run_commands/run_market_scanner.py"
+
+[[jobs]]
+name = "Market Scanner - 11:30 AM"
+schedule = "30 16 * * 1-5"  # 11:30 AM EST on weekdays
+command = "python run_commands/run_market_scanner.py"
+
+[[jobs]]
+name = "Market Scanner - Noon"
+schedule = "0 17 * * 1-5"  # 12:00 PM EST on weekdays
+command = "python run_commands/run_market_scanner.py"
+
+[[jobs]]
+name = "Market Scanner - 12:30 PM"
+schedule = "30 17 * * 1-5"  # 12:30 PM EST on weekdays
+command = "python run_commands/run_market_scanner.py"
+
+[[jobs]]
+name = "Market Scanner - 1 PM"
+schedule = "0 18 * * 1-5"  # 1:00 PM EST on weekdays
+command = "python run_commands/run_market_scanner.py"
+
+[[jobs]]
+name = "Market Scanner - 1:30 PM"
+schedule = "30 18 * * 1-5"  # 1:30 PM EST on weekdays
+command = "python run_commands/run_market_scanner.py"
+
+[[jobs]]
+name = "Market Scanner - 2 PM"
+schedule = "0 19 * * 1-5"  # 2:00 PM EST on weekdays
+command = "python run_commands/run_market_scanner.py"
+
+[[jobs]]
+name = "Market Scanner - 2:30 PM"
+schedule = "30 19 * * 1-5"  # 2:30 PM EST on weekdays
+command = "python run_commands/run_market_scanner.py"
+
+[[jobs]]
+name = "Market Scanner - 3 PM"
+schedule = "0 20 * * 1-5"  # 3:00 PM EST on weekdays
+command = "python run_commands/run_market_scanner.py"
+
+[[jobs]]
+name = "Market Scanner - 3:30 PM"
+schedule = "30 20 * * 1-5"  # 3:30 PM EST on weekdays
+command = "python run_commands/run_market_scanner.py"
+
+[[jobs]]
+name = "Market Scanner - Closing"
+schedule = "0 21 * * 1-5"  # 4:00 PM EST on weekdays
+command = "python run_commands/run_market_scanner.py"

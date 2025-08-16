@@ -22,7 +22,7 @@ aiohttp==3.9.1
 python-dotenv==1.0.0
 pydantic==2.5.3
 pydantic-settings==2.1.0
-email-validator==2.1.0
+email-validator==2.1.1
 
 # Security
 python-jose[cryptography]==3.3.0
@@ -35,6 +35,8 @@ sentry-sdk[fastapi]==1.39.1
 # Data Processing
 pandas==2.1.4
 numpy==1.26.3
+yfinance==0.2.36
+pytz==2024.1
 
 # Testing
 pytest==8.3.4

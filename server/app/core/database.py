@@ -239,3 +239,7 @@ def transactional(func):
             return await func(*args, **kwargs)
     
     return wrapper
+
+
+# Alias for compatibility with different naming conventions
+get_async_session = get_db

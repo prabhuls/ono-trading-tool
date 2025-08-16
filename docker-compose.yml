@@ -1,129 +1,48 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
-  postgres:
-    image: postgres:15-alpine
-    container_name: trading-tools-postgres
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: trading_tools
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    networks:
-      - trading-tools-network
-
-  # Redis Cache
-  redis:
-    image: redis:7-alpine
-    container_name: trading-tools-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    networks:
-      - trading-tools-network
-
-  # Backend API
   backend:
     build:
       context: ./server
       dockerfile: Dockerfile
-    container_name: trading-tools-backend
     ports:
       - "8000:8000"
     environment:
-      - ENVIRONMENT=${ENVIRONMENT:-development}
-      - DATABASE_URL=postgresql://postgres:password@postgres:5432/trading_tools
-      - REDIS_URL=redis://redis:6379
-      - SECRET_KEY=${SECRET_KEY}
-      - SENTRY_DSN=${SENTRY_DSN}
-      - POLYGON_API_KEY=${POLYGON_API_KEY}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - DATABASE_URL=postgresql://postgres:gMyNpysNEmFNexTBcHgMCYxLNgaOGYXX@shuttle.proxy.rlwy.net:45435/railway
+      - ENABLE_DATABASE=true
+      - ENABLE_CACHING=false
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - HOST=0.0.0.0
+      - PORT=8000
+      - SECRET_KEY=your-secret-key-for-sessions-change-this-in-production
+      - JWT_SECRET=your-jwt-secret-key-here
+      - OCT_PUBLIC_KEY_URL=https://oneclicktrading.io/.well-known/jwks.json
+      - THETRADELIST_API_KEY=5b4960fc-2cd5-4bda-bae1-e84c1db1f3f5
+      - TRADELIST_API_KEY=5b4960fc-2cd5-4bda-bae1-e84c1db1f3f5
+      - POLYGON_API_KEY=your_polygon_api_key_here
     volumes:
-      - ./server/app:/app/app:ro
-    restart: unless-stopped
+      - ./server:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     networks:
-      - trading-tools-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      - app-network
 
-  # Frontend
   frontend:
-    build:
-      context: ./client
-      dockerfile: Dockerfile
-      args:
-        - NEXT_PUBLIC_API_URL=http://backend:8000
-        - NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}
-        - NEXT_PUBLIC_ENVIRONMENT=${ENVIRONMENT:-development}
-    container_name: trading-tools-frontend
+    image: node:20-alpine
+    working_dir: /app
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-    depends_on:
-      - backend
-    restart: unless-stopped
-    networks:
-      - trading-tools-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-  # Nginx Reverse Proxy (Optional for production)
-  nginx:
-    image: nginx:alpine
-    container_name: trading-tools-nginx
-    ports:
-      - "80:80"
-      - "443:443"
+      - VITE_API_URL=http://backend:8000
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./client:/app
+      - /app/node_modules
+    command: sh -c "npm install --legacy-peer-deps && npm run dev -- --host 0.0.0.0 --port 3000"
     depends_on:
       - backend
-      - frontend
-    restart: unless-stopped
     networks:
-      - trading-tools-network
-    profiles:
-      - production
-
-volumes:
-  postgres_data:
-    driver: local
-  redis_data:
-    driver: local
+      - app-network
 
 networks:
-  trading-tools-network:
+  app-network:
     driver: bridge

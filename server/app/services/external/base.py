@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from urllib.parse import urljoin
 
 from app.core.logging import get_logger
-from app.core.cache import cache_manager
+from app.core.cache import redis_cache
 from app.core.monitoring import monitor_performance, ErrorMonitoring
 from app.core.config import settings
 
@@ -207,7 +207,7 @@ class ExternalAPIService(ABC, Generic[T]):
         cache_key = None
         if method == "GET" and use_cache and self.cache_ttl:
             cache_key = self._get_cache_key(endpoint, params)
-            cached_response = await cache_manager.get(
+            cached_response = redis_cache.get(
                 cache_key,
                 namespace=f"external_api:{self.service_name}"
             )
@@ -267,7 +267,7 @@ class ExternalAPIService(ABC, Generic[T]):
                 # Cache successful GET responses
                 if method == "GET" and use_cache and cache_key:
                     ttl = cache_ttl or self.cache_ttl
-                    await cache_manager.set(
+                    redis_cache.set(
                         cache_key,
                         data,
                         ttl=ttl,

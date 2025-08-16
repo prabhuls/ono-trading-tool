@@ -10,7 +10,7 @@ from app.core.responses import (
     not_found_error,
     ErrorCode
 )
-from app.core.cache import cache
+from app.core.cache import redis_cache
 from app.core.logging import get_logger
 from app.core.monitoring import monitor_performance, capture_errors
 
@@ -47,7 +47,7 @@ class ExampleResponse(BaseModel):
 
 # Example endpoints demonstrating various patterns
 @router.get("/items", response_model=List[ExampleResponse])
-@cache(ttl=300, namespace="example")
+# @cache(ttl=300, namespace="example")  # TODO: Re-enable when cache decorator is implemented
 async def list_items(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(50, ge=1, le=100, description="Items per page"),
@@ -289,7 +289,7 @@ async def process_batch(
 
 
 @router.get("/external-data")
-@cache(ttl=600, namespace="external_api")
+# @cache(ttl=600, namespace="external_api")  # TODO: Re-enable when cache decorator is implemented
 async def get_external_data() -> JSONResponse:
     """
     Example endpoint that calls external API

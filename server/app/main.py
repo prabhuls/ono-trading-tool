@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
     
     # Connect to cache if enabled
     if settings.enable_caching:
-        await cache_manager.connect()
+        logger.info("Redis cache enabled")
     else:
         logger.info("Cache is disabled")
     

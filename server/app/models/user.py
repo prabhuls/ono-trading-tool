@@ -14,6 +14,7 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.api_key import APIKey
     from app.models.watchlist import Watchlist
+    from app.models.trades import CreditSpread
 
 
 class User(Base):
@@ -109,6 +110,13 @@ class User(Base):
     
     watchlists: Mapped[List["Watchlist"]] = relationship(
         "Watchlist",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin"
+    )
+    
+    credit_spreads: Mapped[List["CreditSpread"]] = relationship(
+        "CreditSpread",
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin"

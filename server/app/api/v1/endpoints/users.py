@@ -10,7 +10,7 @@ from passlib.context import CryptContext  # type: ignore[import-untyped]
 
 from app.core.dependencies import get_db, require_database
 from app.core.responses import create_success_response
-from app.core.cache import cache, cache_manager
+from app.core.cache import redis_cache
 from app.models.user import User
 from app.utils.database import DatabaseCRUD, PaginationParams
 from app.schemas.user import (
@@ -58,7 +58,7 @@ async def create_user(
 
 @router.get("/", response_model=UserListResponse)
 @require_database
-@cache(ttl=60, namespace="users")
+# @cache(ttl=60, namespace="users")  # TODO: Re-enable when cache decorator is implemented
 async def list_users(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
@@ -97,7 +97,7 @@ async def list_users(
 
 @router.get("/{user_id}", response_model=UserResponse)
 @require_database
-@cache(ttl=300, namespace="users")
+# @cache(ttl=300, namespace="users")  # TODO: Re-enable when cache decorator is implemented
 async def get_user(
     user_id: str,
     db: AsyncSession = Depends(get_db)

@@ -1,0 +1,3 @@
+SDOW
+SMPL
+FRPT

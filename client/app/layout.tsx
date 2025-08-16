@@ -3,11 +3,16 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { QueryClientProvider } from "@/lib/query-client";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/toaster";
+import Navbar from "@/components/layout/Navbar";
+import { MarketHoursPopup } from "@/components/MarketHoursPopup";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: process.env.NEXT_PUBLIC_APP_NAME || "Trading Tools",
+  title: "Cash Flow Agent VIP",
   description: "Professional trading and investment tools platform",
 };
 
@@ -21,7 +26,18 @@ export default function RootLayout({
       <body className={inter.className}>
         <ErrorBoundary>
           <AuthProvider>
-            {children}
+            <QueryClientProvider>
+              <TooltipProvider>
+                <div className="min-h-screen flex flex-col bg-white text-gray-900">
+                  <Navbar />
+                  <div className="flex-1 bg-white">
+                    {children}
+                  </div>
+                  <MarketHoursPopup />
+                </div>
+                <Toaster />
+              </TooltipProvider>
+            </QueryClientProvider>
           </AuthProvider>
         </ErrorBoundary>
       </body>

@@ -92,3 +92,7 @@ class OptionalDatabase:
         except RuntimeError:
             return None
         return None
+
+
+# Alias for backward compatibility
+get_async_session = get_db

@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
-@router.post("/verify")
+@router.get("/verify")
 async def verify_token(
     jwt_payload: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ):
@@ -28,17 +28,21 @@ async def verify_token(
             detail="Invalid or missing token"
         )
     
-    return create_success_response(
-        data={
-            "valid": True,
+    # Return user object in the format the frontend expects
+    # OCT tokens only have sub and subscriptions, no email/username
+    return {
+        "success": True,
+        "user": {
+            "sub": jwt_payload.user_id,
             "user_id": jwt_payload.user_id,
-            "email": jwt_payload.email,
-            "username": jwt_payload.username,
             "subscriptions": jwt_payload.subscriptions,
-            "expires_at": jwt_payload.exp
+            "exp": jwt_payload.exp,
+            "iat": jwt_payload.iat,
+            "is_active": jwt_payload.is_active
         },
-        message="Token is valid"
-    )
+        "valid": True,
+        "message": "Token is valid"
+    }
 
 
 @router.get("/check-subscription/{subscription_name}")

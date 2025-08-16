@@ -1,15 +1,12 @@
 import { ApiClient } from "./api";
 
 export interface User {
-  id: string;
-  email: string;
-  username?: string;
-  full_name?: string;
+  sub: string;  // OCT user ID
+  user_id: string;
+  subscriptions: Record<string, unknown>;  // OCT subscriptions like FINMC
+  exp?: number;
+  iat?: number;
   is_active: boolean;
-  is_verified: boolean;
-  subscriptions: Record<string, boolean | unknown>;
-  created_at: string;
-  last_login_at?: string;
 }
 
 export interface AuthState {
@@ -26,12 +23,17 @@ export interface AuthResponse {
 }
 
 export interface TokenVerifyResponse {
+  success: boolean;
   valid: boolean;
-  user_id: string;
-  email?: string;
-  username?: string;
-  subscriptions: Record<string, boolean | unknown>;
-  expires_at?: number;
+  user: {
+    sub: string;
+    user_id: string;
+    subscriptions: Record<string, unknown>;
+    exp?: number;
+    iat?: number;
+    is_active: boolean;
+  };
+  message: string;
 }
 
 const AUTH_TOKEN_KEY = "auth_token";
@@ -105,9 +107,12 @@ export class AuthService {
       const token = this.getToken();
       if (!token) return false;
       
-      const response = await ApiClient.post<TokenVerifyResponse>("/api/v1/auth/auth/verify");
+      const response = await ApiClient.get<TokenVerifyResponse>("/api/v1/auth/verify");
       
-      if (response.success && response.data?.valid) {
+      if (response.success && response.data?.valid && response.data?.user) {
+        // Store user data from OCT token
+        const user: User = response.data.user;
+        this.setStoredUser(user);
         return true;
       }
       
@@ -131,7 +136,7 @@ export class AuthService {
         has_subscription: boolean;
         authenticated: boolean;
         subscription_data?: unknown;
-      }>(`/api/v1/auth/auth/check-subscription/${subscriptionName}`);
+      }>(`/api/v1/auth/check-subscription/${subscriptionName}`);
       
       return response.data?.has_subscription || false;
     } catch (error) {
@@ -161,7 +166,7 @@ export class AuthService {
       });
       
       const response = await ApiClient.get<AuthResponse>(
-        `/api/v1/auth/auth/dev/create-test-token?${params}`
+        `/api/v1/auth/dev/create-test-token?${params}`
       );
       
       if (response.success && response.data) {

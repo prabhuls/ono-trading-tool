@@ -3,7 +3,7 @@ Authentication dependencies for FastAPI endpoints
 """
 from typing import Optional, Callable
 from functools import wraps
-from fastapi import Depends, HTTPException, status, Request
+from fastapi import Depends, HTTPException, status, Request, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.core.security import verify_jwt_token, extract_token_from_header, JWTPayload, validate_subscription
@@ -21,20 +21,28 @@ security = HTTPBearer(auto_error=False)
 
 
 async def get_current_token(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    token_from_query: Optional[str] = Query(None, alias="token")
 ) -> Optional[str]:
     """
-    Extract JWT token from request
+    Extract JWT token from request (supports both Authorization header and query param)
     
     Args:
         credentials: HTTP Bearer credentials
+        token_from_query: Token from query parameter (?token=...)
         
     Returns:
         Token string if present, None otherwise
     """
-    if not credentials:
-        return None
-    return credentials.credentials
+    # First check query parameter (for OCT redirect flow)
+    if token_from_query:
+        return token_from_query
+    
+    # Then check Authorization header
+    if credentials:
+        return credentials.credentials
+    
+    return None
 
 
 async def get_current_user_jwt(
@@ -85,11 +93,12 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     
     # Create user if doesn't exist (first login)
-    if not user and jwt_payload.email:
+    # OCT tokens don't have email, so create user with just the sub ID
+    if not user:
         user = User(
             external_auth_id=jwt_payload.user_id,
-            email=jwt_payload.email,
-            username=jwt_payload.username,
+            email=f"{jwt_payload.user_id}@oct.user",  # Placeholder email for OCT users
+            username=jwt_payload.username or f"user_{jwt_payload.user_id[:8]}",
             full_name=jwt_payload.full_name,
             is_active=jwt_payload.is_active,
             is_verified=True,  # Verified through trading service

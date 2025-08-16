@@ -16,10 +16,10 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const useAuth = () => {
+export const useAuthContext = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    throw new Error("useAuthContext must be used within an AuthProvider");
   }
   return context;
 };
@@ -57,21 +57,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           // Verify token with backend
           const isValid = await AuthService.verifyToken();
           if (isValid) {
-            // Decode token to get user info
-            const payload = AuthService.decodeToken(token);
-            if (payload) {
-              const user: User = {
-                id: (payload.sub as string) || (payload.user_id as string) || "unknown",
-                email: (payload.email as string) || "unknown@example.com",
-                username: payload.username as string | undefined,
-                full_name: payload.full_name as string | undefined,
-                is_active: payload.is_active !== false,
-                is_verified: true,
-                subscriptions: (payload.subscriptions as Record<string, boolean | unknown>) || {},
-                created_at: new Date().toISOString(),
-              };
-              
-              AuthService.setStoredUser(user);
+            // Get stored user from AuthService (set during verification)
+            const user = AuthService.getStoredUser();
+            if (user) {
               setAuthState({
                 user,
                 isAuthenticated: true,
@@ -115,28 +103,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const setToken = useCallback((token: string) => {
     AuthService.setExternalToken(token);
     
-    // Decode token to get user info
-    const payload = AuthService.decodeToken(token);
-    if (payload) {
-      const user: User = {
-        id: (payload.sub as string) || (payload.user_id as string) || "unknown",
-        email: (payload.email as string) || "unknown@example.com",
-        username: payload.username as string | undefined,
-        full_name: payload.full_name as string | undefined,
-        is_active: payload.is_active !== false,
-        is_verified: true,
-        subscriptions: (payload.subscriptions as Record<string, boolean | unknown>) || {},
-        created_at: new Date().toISOString(),
-      };
-      
-      AuthService.setStoredUser(user);
-      setAuthState({
-        user,
-        isAuthenticated: true,
-        isLoading: false,
-        token,
-      });
-    }
+    // Verify token and get user info from backend
+    AuthService.verifyToken().then(isValid => {
+      if (isValid) {
+        const user = AuthService.getStoredUser();
+        if (user) {
+          setAuthState({
+            user,
+            isAuthenticated: true,
+            isLoading: false,
+            token,
+          });
+        }
+      }
+    });
   }, []);
 
 
@@ -161,20 +141,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const isValid = await AuthService.verifyToken();
       if (isValid) {
-        const payload = AuthService.decodeToken(token);
-        if (payload) {
-          const user: User = {
-            id: (payload.sub as string) || (payload.user_id as string) || "unknown",
-            email: (payload.email as string) || "unknown@example.com",
-            username: payload.username as string | undefined,
-            full_name: payload.full_name as string | undefined,
-            is_active: payload.is_active !== false,
-            is_verified: true,
-            subscriptions: (payload.subscriptions as Record<string, boolean | unknown>) || {},
-            created_at: new Date().toISOString(),
-          };
-          
-          AuthService.setStoredUser(user);
+        const user = AuthService.getStoredUser();
+        if (user) {
           setAuthState({
             user,
             isAuthenticated: true,
@@ -225,7 +193,7 @@ export function withAuth<P extends object>(
   }
 ) {
   return function AuthenticatedComponent(props: P) {
-    const { isAuthenticated, isLoading, checkSubscription } = useAuth();
+    const { isAuthenticated, isLoading, checkSubscription } = useAuthContext();
     const router = useRouter();
 
     useEffect(() => {
