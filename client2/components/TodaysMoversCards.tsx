@@ -217,29 +217,11 @@ export function TodaysMoversCards() {
               Today's Market Movers
             </h1>
             <p className="text-sm text-gray-500">
-              No current data available - use search to analyze any ticker
+              No current data available
             </p>
           </div>
 
-          {/* Search Bar - Always Available */}
-          <div className="flex justify-center mb-12">
-            <div className="flex items-center max-w-md w-full">
-              <Input
-                type="text"
-                placeholder="Enter ticker to analyze (e.g., AAPL)"
-                value={searchTicker}
-                onChange={(e) => setSearchTicker(e.target.value.toUpperCase())}
-                onKeyPress={handleSearchKeyPress}
-                className="flex-1 h-12 text-lg border-vip border-gray-300 rounded-l-lg rounded-r-none border-r-0 focus:border-green-500 focus:ring-green-500 uppercase"
-              />
-              <Button
-                onClick={handleSearchFind}
-                className="h-12 px-6 bg-green-600 hover:bg-green-700 text-white rounded-r-lg rounded-l-none border border-green-600 hover:border-green-700"
-              >
-                FIND
-              </Button>
-            </div>
-          </div>
+          {/* Search Bar Removed */}
           
           <div className="flex flex-col items-center justify-center py-12 px-8">
             <div className="bg-white border-vip-thick border-gray-200 rounded-2xl p-10 max-w-md text-center shadow-premium animate-scale-in">
@@ -276,25 +258,7 @@ export function TodaysMoversCards() {
           )}
         </div>
 
-        {/* Search Bar */}
-        <div className="flex justify-center mb-10 animate-slide-up">
-          <div className="flex items-center max-w-lg w-full shadow-card-hover rounded-xl overflow-hidden">
-            <Input
-              type="text"
-              placeholder="Enter ticker to analyze (e.g., AAPL)"
-              value={searchTicker}
-              onChange={(e) => setSearchTicker(e.target.value.toUpperCase())}
-              onKeyPress={handleSearchKeyPress}
-              className="flex-1 h-14 text-lg font-semibold border-0 bg-white focus:outline-none focus:ring-0 px-6 uppercase placeholder:normal-case placeholder:font-normal"
-            />
-            <Button
-              onClick={handleSearchFind}
-              className="h-14 px-8 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold text-lg border-0 rounded-none transition-all duration-200"
-            >
-              FIND
-            </Button>
-          </div>
-        </div>
+        {/* Search Bar Removed */}
 
         {/* Main Cards Grid */}
         <div className="flex flex-wrap justify-center gap-6 max-w-7xl mx-auto">
