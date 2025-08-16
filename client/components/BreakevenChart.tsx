@@ -86,7 +86,7 @@ export function BreakevenChart({
     enabled: !!cleanTicker && isClient,
     // FIXED: Reasonable caching instead of aggressive cache-busting
     staleTime: 2 * 60 * 1000, // 2 minutes
-    cacheTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 5 * 60 * 1000, // 5 minutes (was cacheTime in v4)
     refetchOnWindowFocus: false,
     retry: 2,
     queryFn: async () => {
