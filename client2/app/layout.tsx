@@ -12,7 +12,7 @@ import { MarketHoursPopup } from "@/components/MarketHoursPopup";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Cash Flow Agent",
+  title: "Cash Flow Agent VIP",
   description: "Professional trading and investment tools platform",
 };
 

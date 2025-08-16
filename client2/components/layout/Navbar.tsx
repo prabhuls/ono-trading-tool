@@ -22,7 +22,7 @@ export default function Navbar() {
           <div className="flex items-center mb-4 sm:mb-0">
             <Link href="/">
               <h1 className="text-2xl font-black text-gradient cursor-pointer hover:scale-105 transition-transform duration-200">
-                Cash Flow Agent
+                Cash Flow Agent VIP
               </h1>
             </Link>
           </div>
