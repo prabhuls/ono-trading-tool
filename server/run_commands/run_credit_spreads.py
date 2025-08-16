@@ -13,7 +13,7 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from app.workers.credit_spreads_batch import scan_credit_spreads
+from app.workers.credit_spreads_scanner import scan_credit_spreads
 
 # Configure logging
 logging.basicConfig(
