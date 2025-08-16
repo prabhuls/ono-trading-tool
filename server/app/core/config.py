@@ -116,8 +116,9 @@ class Settings(BaseSettings):
     secret_key: str = Field(..., validation_alias="SECRET_KEY")
     security: SecurityConfig = SecurityConfig()
     
-    # Frontend URL
+    # Frontend URLs (comma-separated for multiple frontends)
     frontend_url: Optional[str] = Field(None, validation_alias="FRONTEND_URL")
+    additional_frontend_urls: Optional[str] = Field(None, validation_alias="ADDITIONAL_FRONTEND_URLS")
     
     # Database
     database_url: Optional[str] = Field(None, validation_alias="DATABASE_URL")
@@ -217,17 +218,28 @@ class Settings(BaseSettings):
             if frontend_origin not in origins:
                 origins.append(frontend_origin)
         
-        # Add Railway app domains (both http and https)
-        railway_patterns = [
-            "https://*.railway.app",
-            "http://*.railway.app",
-            "https://*.up.railway.app",
-            "http://*.up.railway.app"
-        ]
+        # Add additional frontend URLs if specified
+        if self.additional_frontend_urls:
+            additional_urls = [url.strip() for url in self.additional_frontend_urls.split(',')]
+            for url in additional_urls:
+                if url:
+                    if not url.startswith(("http://", "https://")):
+                        url = f"https://{url}"
+                    if url not in origins:
+                        origins.append(url)
         
-        # In production, add specific Railway domains
+        # Add specific Railway app domains if in production
+        # Note: Wildcards don't work with FastAPI CORS, must use exact domains
         if self.environment == "production":
-            origins.extend(railway_patterns)
+            # Add any known Railway domains here
+            known_railway_domains = [
+                "https://cashflowagent-vip-production.up.railway.app",
+                "https://cfa-frontend-production.up.railway.app",
+                "https://client2-production.up.railway.app"
+            ]
+            for domain in known_railway_domains:
+                if domain not in origins:
+                    origins.append(domain)
         
         return origins
     
