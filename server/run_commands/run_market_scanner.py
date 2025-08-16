@@ -51,10 +51,11 @@ async def main():
     logger.info("=" * 60)
     
     # Check if market hours (optional - Railway CRON can handle scheduling)
-    if not is_market_hours():
-        logger.info("Outside market hours - skipping scan")
-        logger.info("Market hours: 9:30 AM - 4:00 PM EST, Monday-Friday")
-        sys.exit(0)
+    # Commented out to allow running outside market hours for testing/manual runs
+    # if not is_market_hours():
+    #     logger.info("Outside market hours - skipping scan")
+    #     logger.info("Market hours: 9:30 AM - 4:00 PM EST, Monday-Friday")
+    #     sys.exit(0)
     
     try:
         # Run market scanner
