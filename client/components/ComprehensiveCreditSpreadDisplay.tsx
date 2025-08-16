@@ -41,7 +41,7 @@ export function ComprehensiveCreditSpreadDisplay({ data, onClose, hideClaimButto
         throw new Error('No authentication token found');
       }
       
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       
       // Prepare the data for the new credit-spreads endpoint
       const requestData = {

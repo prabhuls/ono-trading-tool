@@ -103,7 +103,7 @@ export function useAuth(): AuthState {
 
         console.log('Verifying token with backend...');
         // Verify token with backend
-        const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
         const response = await fetch(`${backendUrl}/api/v1/auth/verify`, {
           method: 'GET',
           headers: {

@@ -110,7 +110,7 @@ export function TodaysMoversCards() {
         const sessionToken = sessionStorage.getItem('token');
         const token = localToken || sessionToken || authToken;
         
-        const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
         // Include token in both query param and header for compatibility
         const url = token ? `${backendUrl}/api/v1/market/todays-movers?token=${token}` : `${backendUrl}/api/v1/market/todays-movers`;
         const response = await fetch(url, {

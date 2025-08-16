@@ -33,7 +33,7 @@ export default function CreditSpreadAnalysisPage() {
       const sessionToken = sessionStorage.getItem('token');
       const token = localToken || sessionToken;
       
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       // Include token in query param as well for backend compatibility
       const url = token ? `${backendUrl}/api/v1/credit-spread/analyze-credit-spread?token=${token}` : `${backendUrl}/api/v1/credit-spread/analyze-credit-spread`;
       const response = await fetch(url, {

@@ -94,7 +94,7 @@ export function BreakevenChart({
       console.log('🌐 API call timestamp:', new Date().toISOString());
       
       // Call backend endpoint for chart data
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const url = `${backendUrl}/api/v1/stocks/${cleanTicker}`;
       console.log('🌐 Fetching URL:', url);
       

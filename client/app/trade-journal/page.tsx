@@ -102,7 +102,7 @@ export default function TradeJournal() {
         throw new Error('No authentication token found');
       }
       
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const response = await fetch(`${backendUrl}/api/v1/user-spreads/user-claims`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -162,7 +162,7 @@ export default function TradeJournal() {
         throw new Error('No authentication token found');
       }
       
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const response = await fetch(`${backendUrl}/api/v1/user-spreads/${spreadId}`, {
         method: 'DELETE',
         headers: {
