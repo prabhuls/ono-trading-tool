@@ -212,7 +212,14 @@ export function ComprehensiveCreditSpreadDisplay({ data, onClose, hideClaimButto
   }
 
   // Handle both data formats: API response and saved data
-  let current_stock_price, market_context, spread_analysis, netCredit, maxRisk, roiPercent, bufferRoom, profitScenarios;
+  let current_stock_price: number = 0;
+  let market_context: any = null;
+  let spread_analysis: any = {};
+  let netCredit: number = 0;
+  let maxRisk: number = 0;
+  let roiPercent: number = 0;
+  let bufferRoom: number = 0;
+  let profitScenarios: any[] = [];
 
   if (isSavedData) {
     // Use saved data format - handle both nested and direct formats
