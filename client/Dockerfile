@@ -3,6 +3,18 @@ FROM node:20-alpine as builder
 
 WORKDIR /app
 
+# Accept build arguments for Next.js public environment variables
+ARG NEXT_PUBLIC_BACKEND_URL
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_APP_NAME
+ARG NEXT_PUBLIC_ENVIRONMENT
+
+# Set them as environment variables for the build
+ENV NEXT_PUBLIC_BACKEND_URL=$NEXT_PUBLIC_BACKEND_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
+ENV NEXT_PUBLIC_ENVIRONMENT=$NEXT_PUBLIC_ENVIRONMENT
+
 # Copy package files
 COPY package*.json ./
 
@@ -12,7 +24,11 @@ RUN npm ci --legacy-peer-deps
 # Copy source code
 COPY . .
 
-# Build the application
+# Debug: Show environment variables during build
+RUN echo "Building with NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL}"
+RUN echo "Building with NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}"
+
+# Build the application (this will now use the ENV variables)
 RUN npm run build
 
 # Runtime stage
