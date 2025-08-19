@@ -76,4 +76,11 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        sys.exit(0)
+    finally:
+        # Give async tasks time to cleanup
+        import time
+        time.sleep(0.5)

@@ -196,6 +196,7 @@ class DailyCleanupWorker:
                 # Check if transfer was already completed today
                 if await self.check_transfer_status(session, transfer_date):
                     logger.warning(f"Transfer already completed for {transfer_date}")
+                    await session.close()  # Close session properly
                     return {
                         'success': False,
                         'message': f'Transfer already completed for {transfer_date}',
@@ -210,35 +211,39 @@ class DailyCleanupWorker:
                 logger.info(f"Found {len(todays_movers)} Today's Movers")
                 logger.info(f"Found {len(main_lists)} Main List records")
                 
-                # Step 2: Archive current Main Lists to 7-day archive
-                logger.info("Step 2: Archiving Main Lists to 7-day archive...")
+                # Step 2: Clean up expired archive records FIRST (> 7 days old)
+                # Do this before archiving to avoid conflicts
+                logger.info("Step 2: Cleaning expired archive records...")
+                await self.clean_expired_archives(session)
+                logger.info(f"Removed {self.cleaned_count} expired records from archive")
+                
+                # Step 3: Archive current Main Lists to 7-day archive
+                logger.info("Step 3: Archiving Main Lists to 7-day archive...")
                 for record in main_lists:
                     await self.archive_main_list_record(session, record)
+                
+                # Flush changes to avoid stale state issues
+                await session.flush()
                 
                 logger.info(f"Archived {self.archived_count} new records")
                 logger.info(f"Updated {self.updated_archive_count} existing records")
                 
-                # Step 3: Clear Main Lists table
-                logger.info("Step 3: Clearing Main Lists table...")
+                # Step 4: Clear Main Lists table
+                logger.info("Step 4: Clearing Main Lists table...")
                 await session.execute(delete(MainList))
                 logger.info(f"Cleared {len(main_lists)} records from Main Lists")
                 
-                # Step 4: Transfer Today's Movers to Main Lists
-                logger.info("Step 4: Transferring Today's Movers to Main Lists...")
+                # Step 5: Transfer Today's Movers to Main Lists
+                logger.info("Step 5: Transferring Today's Movers to Main Lists...")
                 for mover in todays_movers:
                     await self.transfer_mover_to_main_list(session, mover)
                 
                 logger.info(f"Transferred {self.transferred_count} records to Main Lists")
                 
-                # Step 5: Clear Today's Movers table
-                logger.info("Step 5: Clearing Today's Movers table...")
+                # Step 6: Clear Today's Movers table
+                logger.info("Step 6: Clearing Today's Movers table...")
                 await session.execute(delete(TodaysMover))
                 logger.info(f"Cleared {len(todays_movers)} records from Today's Movers")
-                
-                # Step 6: Clean up expired archive records (> 7 days old)
-                logger.info("Step 6: Cleaning expired archive records...")
-                await self.clean_expired_archives(session)
-                logger.info(f"Removed {self.cleaned_count} expired records from archive")
                 
                 # Step 7: Record transfer status
                 logger.info("Step 7: Recording transfer status...")
