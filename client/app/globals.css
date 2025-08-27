@@ -41,8 +41,46 @@
     --shadow-vip: 0 0 20px 0 rgba(34, 197, 94, 0.15), 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   }
 
+  .dark {
+    --background: 222 84% 5%;
+    --foreground: 210 40% 98%;
+    --card: 222 84% 5%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 84% 5%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 142 76% 43%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217 32% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 32% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 32% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 32% 25%;
+    --input: 217 32% 17%;
+    --ring: 142 76% 43%;
+
+    /* Chart colors for dark theme */
+    --chart-1: 142 76% 43%;  /* Green */
+    --chart-2: 0 84% 60%;    /* Red */
+    --chart-3: 215 20% 65%;  /* Gray */
+    --chart-4: 38 92% 50%;   /* Orange */
+    --chart-5: 210 100% 50%; /* Blue */
+    --chart-grid: 217 32% 25%;
+
+    /* Trading dashboard specific colors */
+    --dashboard-bg: 222 84% 4%;
+    --dashboard-card: 217 32% 15%;
+    --dashboard-border: 217 32% 20%;
+    --trading-buy: 38 92% 50%;   /* Orange for buy */
+    --trading-sell: 0 84% 60%;   /* Red for sell */
+    --trading-live: 142 76% 43%; /* Green for live */
+  }
+
   body {
-    background: linear-gradient(to bottom, #ffffff, #fafafa);
+    background: hsl(var(--background));
     color: hsl(var(--foreground));
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
     font-size: 16px;
@@ -124,6 +162,47 @@
     margin-right: auto;
     padding-left: 1rem;
     padding-right: 1rem;
+  }
+
+  /* Trading Dashboard Components */
+  .dashboard-bg {
+    background: hsl(var(--dashboard-bg, var(--background)));
+  }
+  
+  .dashboard-card {
+    background: hsl(var(--dashboard-card, var(--card)));
+    border: 1px solid hsl(var(--dashboard-border, var(--border)));
+    border-radius: 8px;
+  }
+  
+  .trading-buy {
+    background-color: hsl(var(--trading-buy));
+    color: hsl(var(--primary-foreground));
+  }
+  
+  .trading-sell {
+    background-color: hsl(var(--trading-sell));
+    color: hsl(var(--primary-foreground));
+  }
+  
+  .trading-live {
+    color: hsl(var(--trading-live));
+  }
+  
+  .live-indicator {
+    @apply inline-block w-2 h-2 rounded-full;
+    background: hsl(var(--trading-live));
+    animation: pulse 2s infinite;
+  }
+  
+  .option-chain-row-buy {
+    background-color: hsla(var(--trading-buy), 0.1);
+    border-left: 3px solid hsl(var(--trading-buy));
+  }
+  
+  .option-chain-row-sell {
+    background-color: hsla(var(--trading-sell), 0.1);
+    border-left: 3px solid hsl(var(--trading-sell));
   }
 }
 

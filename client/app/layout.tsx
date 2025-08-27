@@ -12,7 +12,7 @@ import { MarketHoursPopup } from "@/components/MarketHoursPopup";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Cash Flow Agent VIP",
+  title: "Overnight Options Assistant",
   description: "Professional trading and investment tools platform",
 };
 
@@ -22,17 +22,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <body className={inter.className}>
         <ErrorBoundary>
           <AuthProvider>
             <QueryClientProvider>
               <TooltipProvider>
-                <div className="min-h-screen flex flex-col bg-white text-gray-900">
-                  <Navbar />
-                  <div className="flex-1 bg-white">
-                    {children}
-                  </div>
+                <div className="min-h-screen">
+                  {children}
                   <MarketHoursPopup />
                 </div>
                 <Toaster />
