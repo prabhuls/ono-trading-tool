@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardHeader } from './dashboard-header';
 import { TopRankedTrade } from './top-ranked-trade';
 import { MarketStatus } from './market-status';
@@ -12,39 +12,90 @@ import { mockDashboardData, mockStatusBars } from '@/lib/mock-data/overnight-opt
 export function DashboardLayout() {
   const [dashboardData, setDashboardData] = useState(mockDashboardData);
   const [activeTicker, setActiveTicker] = useState('SPY');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleRefresh = () => {
-    // In a real app, this would fetch fresh data
-    console.log('Refreshing dashboard data...');
+  useEffect(() => {
+    // Simulate data loading
+    const loadData = async () => {
+      try {
+        // Simulate loading delay
+        await new Promise(resolve => setTimeout(resolve, 500));
+        setIsLoading(false);
+      } catch (err) {
+        setError('Failed to load dashboard data');
+        setIsLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  const handleRefresh = (): void => {
+    try {
+      // In a real app, this would fetch fresh data
+      // For now, just prevent any errors
+    } catch (error) {
+      // Silent fail for now (no monitoring setup)
+    }
   };
 
-  const handleScanForNewSpreads = () => {
-    // In a real app, this would trigger spread scanning
-    console.log('Scanning for new spreads...');
+  const handleScanForNewSpreads = (): void => {
+    try {
+      // In a real app, this would trigger spread scanning
+      // For now, just prevent any errors
+    } catch (error) {
+      // Silent fail for now (no monitoring setup)
+    }
   };
 
-  const handleAdjustMaxCost = () => {
-    // In a real app, this would open a dialog to adjust max cost
-    console.log('Adjusting max cost...');
+  const handleAdjustMaxCost = (): void => {
+    try {
+      // In a real app, this would open a dialog to adjust max cost
+      // For now, just prevent any errors
+    } catch (error) {
+      // Silent fail for now (no monitoring setup)
+    }
   };
 
-  const handleIntervalChange = (interval: string) => {
-    // In a real app, this would change the chart data
-    console.log('Changing interval to:', interval);
-    setDashboardData(prev => ({
-      ...prev,
-      chartIntervals: prev.chartIntervals.map(int => ({
-        ...int,
-        isActive: int.value === interval
-      }))
-    }));
+  const handleIntervalChange = (interval: string): void => {
+    try {
+      // In a real app, this would change the chart data
+      setDashboardData(prev => ({
+        ...prev,
+        chartIntervals: prev.chartIntervals.map(int => ({
+          ...int,
+          isActive: int.value === interval
+        }))
+      }));
+    } catch (error) {
+      // Silent fail for now (no monitoring setup)
+    }
   };
 
-  const handleTickerChange = (ticker: string) => {
-    // In a real app, this would change the data source
-    console.log('Changing ticker to:', ticker);
-    setActiveTicker(ticker);
+  const handleTickerChange = (ticker: string): void => {
+    try {
+      // In a real app, this would change the data source
+      setActiveTicker(ticker);
+    } catch (error) {
+      // Silent fail for now (no monitoring setup)
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen dashboard-bg flex items-center justify-center">
+        <div className="text-white">Loading...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen dashboard-bg flex items-center justify-center">
+        <div className="text-red-400">Error: {error}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen dashboard-bg">

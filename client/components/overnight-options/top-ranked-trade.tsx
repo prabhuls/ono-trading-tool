@@ -33,7 +33,7 @@ export function TopRankedTrade({
 
       {/* Ticker Switcher */}
       <div className="flex justify-center">
-        <div className="flex gap-1 bg-gray-800 rounded-lg p-1 w-fit">
+        <div className="flex gap-1 bg-gray-800 rounded-lg p-1 w-fit" role="tablist">
           {tickers.map((ticker) => (
             <button
               key={ticker}
@@ -43,6 +43,10 @@ export function TopRankedTrade({
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-gray-300 hover:text-white hover:bg-gray-700'
               }`}
+              role="tab"
+              aria-label={`Select ${ticker} ticker`}
+              aria-pressed={activeTicker === ticker}
+              aria-selected={activeTicker === ticker}
             >
               {ticker}
             </button>

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import ErrorBoundary from "@/components/ErrorBoundary";
+import ErrorBoundary from "@/components/error-boundary";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { QueryClientProvider } from "@/lib/query-client";
 import { TooltipProvider } from "@/components/ui/tooltip";
