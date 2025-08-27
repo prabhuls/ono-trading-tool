@@ -53,9 +53,7 @@ export function DashboardLayout() {
         <DashboardHeader
           isLive={dashboardData.isLive}
           activeTimeRange={dashboardData.activeTimeRange}
-          activeTicker={activeTicker}
           onRefresh={handleRefresh}
-          onTickerChange={handleTickerChange}
         />
 
         {/* Main Layout */}
@@ -65,8 +63,10 @@ export function DashboardLayout() {
             <TopRankedTrade
               currentSpyPrice={dashboardData.currentSpyPrice}
               spreadRecommendation={dashboardData.spreadRecommendation}
+              activeTicker={activeTicker}
               onScanForNewSpreads={handleScanForNewSpreads}
               onAdjustMaxCost={handleAdjustMaxCost}
+              onTickerChange={handleTickerChange}
             />
             <MarketStatus marketStatus={dashboardData.marketStatus} />
           </div>

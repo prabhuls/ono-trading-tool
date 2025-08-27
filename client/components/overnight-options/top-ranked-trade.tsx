@@ -6,16 +6,21 @@ import { formatCurrency, formatPercentage } from '@/lib/mock-data/overnight-opti
 interface TopRankedTradeProps {
   currentSpyPrice: number;
   spreadRecommendation: SpreadRecommendation;
+  activeTicker?: string;
   onScanForNewSpreads?: () => void;
   onAdjustMaxCost?: () => void;
+  onTickerChange?: (ticker: string) => void;
 }
 
 export function TopRankedTrade({ 
   currentSpyPrice, 
-  spreadRecommendation, 
+  spreadRecommendation,
+  activeTicker = 'SPY',
   onScanForNewSpreads,
-  onAdjustMaxCost 
+  onAdjustMaxCost,
+  onTickerChange 
 }: TopRankedTradeProps) {
+  const tickers = ['SPY', 'XSP', 'SPX'];
   return (
     <div className="space-y-4">
       {/* Current SPY Price */}
@@ -23,7 +28,26 @@ export function TopRankedTrade({
         <div className="text-4xl font-bold text-foreground mb-1">
           {formatCurrency(currentSpyPrice)}
         </div>
-        <div className="text-sm text-muted-foreground">Current SPY Price</div>
+        <div className="text-sm text-muted-foreground">Current {activeTicker} Price</div>
+      </div>
+
+      {/* Ticker Switcher */}
+      <div className="flex justify-center">
+        <div className="flex gap-1 bg-gray-800 rounded-lg p-1 w-fit">
+          {tickers.map((ticker) => (
+            <button
+              key={ticker}
+              onClick={() => onTickerChange?.(ticker)}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-all ${
+                activeTicker === ticker
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-gray-300 hover:text-white hover:bg-gray-700'
+              }`}
+            >
+              {ticker}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Recommended Spread Card */}
