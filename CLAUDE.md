@@ -10,6 +10,8 @@ This is a Trading Tools Boilerplate project with:
 - **Infrastructure**: Docker Compose for local development, Railway-ready for deployment
 - **Cross-platform**: Universal setup script (setup.py) supports Windows, macOS, and Linux
 
+Detailed project requirements can be found at `/docs/PROJECT_REQUIREMENTS.md`
+
 ## Quick Start
 
 ```bash
