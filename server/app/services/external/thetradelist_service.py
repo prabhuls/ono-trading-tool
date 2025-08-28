@@ -338,17 +338,23 @@ class TheTradeListService(ExternalAPIService):
                 # Extract from TheTradeList format
                 day = ticker_data.get("day", {})
                 prev_day = ticker_data.get("prevDay", {})
+                
+                # Calculate current price: use day.c if available (market hours), otherwise prev_day.c + change
+                day_close = day.get("c", 0)
+                prev_close = prev_day.get("c", 0)
+                change = ticker_data.get("todaysChange", 0)
+                current_price = day_close if day_close > 0 else (prev_close + change if prev_close > 0 else 0)
                     
                 ticker_info = {
                     "ticker": ticker_data.get("ticker", ""),
-                    "price": day.get("c", 0),  # close price
-                    "change": ticker_data.get("todaysChange", 0),
+                    "price": current_price,  # calculated current price
+                    "change": change,
                     "change_percent": ticker_data.get("todaysChangePerc", 0),
                     "volume": day.get("v", 0),  # volume
                     "high": day.get("h", 0),    # high
                     "low": day.get("l", 0),     # low  
                     "open": day.get("o", 0),    # open
-                    "previous_close": prev_day.get("c", 0)  # previous close
+                    "previous_close": prev_close  # previous close
                 }
                 
                 normalized["tickers"].append(ticker_info)

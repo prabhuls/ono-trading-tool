@@ -298,7 +298,7 @@ async def get_current_price(
             )
         else:
             return create_error_response(
-                error_code=ErrorCode.EXTERNAL_SERVICE_ERROR,
+                error_code=ErrorCode.EXTERNAL_API_ERROR,
                 message="Stock price data temporarily unavailable",
                 status_code=503,
                 error_details={"service": "TheTradeList API"}
@@ -401,7 +401,7 @@ async def get_current_prices(
             )
         else:
             return create_error_response(
-                error_code=ErrorCode.EXTERNAL_SERVICE_ERROR,
+                error_code=ErrorCode.EXTERNAL_API_ERROR,
                 message="Stock price data temporarily unavailable",
                 status_code=503,
                 error_details={"service": "TheTradeList API"}
@@ -482,7 +482,7 @@ async def get_spy_price(
     except ExternalAPIError as e:
         logger.error("External API error fetching SPY price", error=str(e))
         return create_error_response(
-            error_code=ErrorCode.EXTERNAL_SERVICE_ERROR,
+            error_code=ErrorCode.EXTERNAL_API_ERROR,
             message="SPY price data temporarily unavailable",
             status_code=503,
             error_details={"service": "TheTradeList API"}

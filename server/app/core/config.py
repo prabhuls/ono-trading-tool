@@ -62,9 +62,9 @@ class APIConfig(BaseModel):
     prefix: str = "/api/v1"
     
     # Rate limiting
-    rate_limit_enabled: bool = True
-    rate_limit_requests: int = 100
-    rate_limit_period: int = 60  # seconds
+    rate_limit_enabled: bool = Field(default=True, env="API_RATE_LIMIT_ENABLED")
+    rate_limit_requests: int = Field(default=100, env="API_RATE_LIMIT_REQUESTS")
+    rate_limit_period: int = Field(default=60, env="API_RATE_LIMIT_PERIOD")  # seconds
     
     # Pagination
     default_page_size: int = 50

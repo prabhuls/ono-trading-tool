@@ -289,6 +289,10 @@ export const api = {
   market: {
     status: () => ApiClient.get("/api/v1/market-status/status"),
     sidebarStatus: () => ApiClient.get("/api/v1/market-data/sidebar-status"),
+    // Stock price endpoints
+    currentPrice: (ticker: string) => ApiClient.get(`/api/v1/market-data/current-price/${ticker}`),
+    currentPrices: (tickers: string[]) => ApiClient.get(`/api/v1/market-data/current-prices?tickers=${tickers.join(',')}`),
+    spyPrice: () => ApiClient.get("/api/v1/market-data/spy-price"),
   },
   
   // Add more API endpoints here

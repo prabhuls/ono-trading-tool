@@ -2,6 +2,9 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { SpreadRecommendation } from '@/types/overnight-options';
 import { formatCurrency, formatPercentage } from '@/lib/mock-data/overnight-options';
+import { useStockPrice } from '@/lib/hooks/useStockPrice';
+import { RefreshCw } from 'lucide-react';
+import type { SupportedTicker } from '@/types/stock-price';
 
 interface TopRankedTradeProps {
   currentSpyPrice: number;
@@ -20,15 +23,68 @@ export function TopRankedTrade({
   onAdjustMaxCost,
   onTickerChange 
 }: TopRankedTradeProps) {
-  const tickers = ['SPY', 'XSP', 'SPX'];
+  const tickers: SupportedTicker[] = ['SPY', 'XSP', 'SPX'];
+  
+  // Use real price data from our API
+  const { 
+    priceData, 
+    loading: priceLoading, 
+    error: priceError,
+    refresh: refreshPrice 
+  } = useStockPrice(activeTicker as SupportedTicker);
+  
+  // Use API price if available, fallback to prop
+  const displayPrice = priceData?.price || currentSpyPrice;
+  const priceChange = priceData?.change || 0;
+  const priceChangePercent = priceData?.change_percent || 0;
+  const isPositive = priceChange >= 0;
   return (
     <div className="space-y-4">
-      {/* Current SPY Price */}
+      {/* Current Price */}
       <div className="text-center">
-        <div className="text-4xl font-bold text-foreground mb-1">
-          {formatCurrency(currentSpyPrice)}
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <div className="text-4xl font-bold text-foreground">
+            {priceLoading ? (
+              <div className="animate-pulse">
+                {formatCurrency(currentSpyPrice)}
+              </div>
+            ) : priceError ? (
+              <div className="text-red-400 text-lg">
+                Price Unavailable
+              </div>
+            ) : (
+              formatCurrency(displayPrice)
+            )}
+          </div>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={refreshPrice}
+            className="ml-2 text-muted-foreground hover:text-foreground"
+            disabled={priceLoading}
+          >
+            <RefreshCw className={`h-4 w-4 ${priceLoading ? 'animate-spin' : ''}`} />
+          </Button>
         </div>
-        <div className="text-sm text-muted-foreground">Current {activeTicker} Price</div>
+        
+        {/* Price Change Info */}
+        {priceData && !priceError && (
+          <div className={`text-sm font-medium mb-1 ${
+            isPositive ? 'text-green-400' : 'text-red-400'
+          }`}>
+            {isPositive ? '+' : ''}{priceChange.toFixed(2)} 
+            ({isPositive ? '+' : ''}{priceChangePercent.toFixed(2)}%)
+          </div>
+        )}
+        
+        <div className="text-sm text-muted-foreground">
+          Current {activeTicker} Price
+          {priceError && (
+            <div className="text-xs text-red-400 mt-1">
+              {activeTicker === 'SPY' ? 'Connection error' : 'Ticker not available'}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Ticker Switcher */}
