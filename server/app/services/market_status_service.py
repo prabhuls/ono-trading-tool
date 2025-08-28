@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 from app.core.logging import get_logger
+from app.services.exceptions import TimeCalculationError, DSTCalculationError, SessionCalculationError
 
 
 logger = get_logger(__name__)
@@ -92,7 +93,7 @@ class MarketStatusService:
             
         except Exception as e:
             logger.error("Failed to calculate Eastern Time", error=e, utc=utc_datetime.isoformat())
-            raise ValueError(f"Failed to calculate Eastern Time: {str(e)}")
+            raise TimeCalculationError(f"Failed to calculate Eastern Time: {str(e)}")
     
     @staticmethod
     def is_session_active(current_et: datetime) -> bool:
@@ -144,26 +145,30 @@ class MarketStatusService:
         while next_session_et.weekday() >= 5:
             next_session_et += timedelta(days=1)
         
-        # Convert back to UTC
+        # Convert back to UTC using proper DST calculation
         year = next_session_et.year
         dst_start, dst_end = MarketStatusService.calculate_dst_dates(year)
         
-        # Check if next session date is in DST
-        if dst_start <= MarketStatusService._et_to_utc_naive(next_session_et) < dst_end:
-            # EDT: ET + 4 hours = UTC
+        # Create a UTC datetime to test for the session date
+        # We need to check both EDT and EST possibilities to determine which is correct
+        test_edt_utc = next_session_et + timedelta(hours=4)  # EDT assumption
+        test_est_utc = next_session_et + timedelta(hours=5)  # EST assumption
+        
+        # Check if the session date falls within DST period
+        # Use the date portion for DST boundary comparison
+        session_date = next_session_et.date()
+        dst_start_date = (dst_start - timedelta(hours=4)).date()  # Convert DST start to ET date
+        dst_end_date = (dst_end - timedelta(hours=5)).date()      # Convert DST end to ET date
+        
+        if dst_start_date <= session_date < dst_end_date:
+            # Session is during DST period - use EDT
             next_session_utc = next_session_et + timedelta(hours=4)
         else:
-            # EST: ET + 5 hours = UTC
+            # Session is during standard time - use EST
             next_session_utc = next_session_et + timedelta(hours=5)
         
         return next_session_utc
     
-    @staticmethod
-    def _et_to_utc_naive(et_datetime: datetime) -> datetime:
-        """Helper to convert ET to UTC for DST comparison (naive conversion)"""
-        # This is a naive conversion used only for DST boundary comparison
-        # We assume standard time offset for the comparison
-        return et_datetime + timedelta(hours=5)
     
     @staticmethod
     def format_et_time(et_datetime: datetime) -> str:
@@ -219,11 +224,15 @@ class MarketStatusService:
             year = current_utc.year
             dst_start, dst_end = MarketStatusService.calculate_dst_dates(year)
             
-            # Determine if we're in DST for session time conversion
-            session_utc_offset = 4 if dst_start <= current_utc < dst_end else 5
-            
-            session_start_utc = session_start_et + timedelta(hours=session_utc_offset)
-            session_end_utc = session_end_et + timedelta(hours=session_utc_offset)
+            # Convert session times to UTC
+            if dst_start <= current_utc < dst_end:
+                # EDT: ET + 4 hours = UTC
+                session_start_utc = session_start_et + timedelta(hours=4)
+                session_end_utc = session_end_et + timedelta(hours=4)
+            else:
+                # EST: ET + 5 hours = UTC
+                session_start_utc = session_start_et + timedelta(hours=5)
+                session_end_utc = session_end_et + timedelta(hours=5)
             
             # Calculate next active session if not currently live
             next_active_session = None
@@ -254,6 +263,9 @@ class MarketStatusService:
             
             return result
             
+        except (TimeCalculationError, DSTCalculationError) as e:
+            # Re-raise domain-specific exceptions
+            raise
         except Exception as e:
             logger.error("Failed to calculate market session", error=e)
-            raise
+            raise SessionCalculationError(f"Failed to calculate market session: {str(e)}")
