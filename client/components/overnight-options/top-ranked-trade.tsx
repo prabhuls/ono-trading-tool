@@ -249,7 +249,7 @@ export function TopRankedTrade({
           className="w-full"
           onClick={onAdjustMaxCost}
         >
-          Adjust Max Cost ({algorithmResult?.spread_cost ? formatCurrency(algorithmResult.spread_cost + 0.01) : '$1.00'})
+          Adjust Max Cost ({formatCurrency(0.74)})
         </Button>
       </div>
     </div>
