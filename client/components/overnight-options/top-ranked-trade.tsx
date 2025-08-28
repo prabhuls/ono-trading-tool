@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlgorithmResult } from '@/types/overnight-options';
@@ -5,6 +6,7 @@ import { formatCurrency, formatPercentage } from '@/lib/mock-data/overnight-opti
 import { useStockPrice } from '@/lib/hooks/useStockPrice';
 import { RefreshCw } from 'lucide-react';
 import type { SupportedTicker } from '@/types/stock-price';
+import { MaxCostDialog } from './max-cost-dialog';
 
 interface TopRankedTradeProps {
   currentSpyPrice: number;
@@ -14,7 +16,8 @@ interface TopRankedTradeProps {
   expiration?: string;
   activeTicker?: string;
   onScanForNewSpreads?: () => void;
-  onAdjustMaxCost?: () => void;
+  maxCost: number;
+  onMaxCostChange: (newMaxCost: number) => void;
   onTickerChange?: (ticker: string) => void;
 }
 
@@ -26,9 +29,11 @@ export function TopRankedTrade({
   expiration,
   activeTicker = 'SPY',
   onScanForNewSpreads,
-  onAdjustMaxCost,
+  maxCost,
+  onMaxCostChange,
   onTickerChange 
 }: TopRankedTradeProps) {
+  const [isMaxCostDialogOpen, setIsMaxCostDialogOpen] = useState(false);
   const tickers: SupportedTicker[] = ['SPY', 'XSP', 'SPX'];
   
   // Use real price data from our API
@@ -39,6 +44,10 @@ export function TopRankedTrade({
     error: priceError,
     refresh: refreshPrice 
   } = useStockPrice(activeTicker as SupportedTicker);
+  
+  const handleMaxCostSave = (newMaxCost: number) => {
+    onMaxCostChange(newMaxCost);
+  };
   
   // Use only real API price data, no hardcoded fallback
   const displayPrice = priceData?.price;
@@ -247,11 +256,18 @@ export function TopRankedTrade({
         <Button 
           variant="outline" 
           className="w-full"
-          onClick={onAdjustMaxCost}
+          onClick={() => setIsMaxCostDialogOpen(true)}
         >
-          Adjust Max Cost ({formatCurrency(0.74)})
+          Adjust Max Cost ({formatCurrency(maxCost)})
         </Button>
       </div>
+      
+      <MaxCostDialog
+        open={isMaxCostDialogOpen}
+        currentMaxCost={maxCost}
+        onClose={() => setIsMaxCostDialogOpen(false)}
+        onSave={handleMaxCostSave}
+      />
     </div>
   );
 }

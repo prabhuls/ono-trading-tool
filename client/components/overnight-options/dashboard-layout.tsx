@@ -29,6 +29,7 @@ export function DashboardLayout() {
   const [optionChainLoading, setOptionChainLoading] = useState(true); // Show loading for option chain initially
   const [optionChainError, setOptionChainError] = useState<string | null>(null);
   const [currentSpyPrice, setCurrentSpyPrice] = useState<number>(585.27);
+  const [maxCost, setMaxCost] = useState<number>(0.74); // Default max cost for algorithm
 
   // Fetch market status from API
   const fetchMarketStatus = async (): Promise<void> => {
@@ -58,7 +59,9 @@ export function DashboardLayout() {
       setOptionChainLoading(true);
       setOptionChainError(null);
       
-      const response = await api.optionChain.getWithAlgorithm(activeTicker);
+      const response = await api.optionChain.getWithAlgorithm(activeTicker, {
+        max_cost: maxCost
+      });
       
       if (response.success && response.data) {
         const optionChainResponse = response.data as any;
@@ -122,7 +125,7 @@ export function DashboardLayout() {
     }, 30000); // Poll every 30 seconds
 
     return () => clearInterval(interval);
-  }, [activeTicker]); // Refetch when ticker changes
+  }, [activeTicker, maxCost]); // Refetch when ticker or maxCost changes
 
   const handleRefresh = async (): Promise<void> => {
     try {
@@ -145,12 +148,11 @@ export function DashboardLayout() {
     }
   };
 
-  const handleAdjustMaxCost = (): void => {
+  const handleMaxCostChange = (newMaxCost: number): void => {
     try {
-      // In a real app, this would open a dialog to adjust max cost
-      // For now, just prevent any errors
+      setMaxCost(newMaxCost);
     } catch (error) {
-      // Silent fail for now (no monitoring setup)
+      console.error('Failed to update max cost:', error);
     }
   };
 
@@ -204,7 +206,8 @@ export function DashboardLayout() {
               expiration={optionChainData.length > 0 ? dashboardData.spreadRecommendation.expiration : undefined}
               activeTicker={activeTicker}
               onScanForNewSpreads={handleScanForNewSpreads}
-              onAdjustMaxCost={handleAdjustMaxCost}
+              maxCost={maxCost}
+              onMaxCostChange={handleMaxCostChange}
               onTickerChange={handleTickerChange}
             />
             <MarketStatus />
