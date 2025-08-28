@@ -31,7 +31,7 @@ export function SpyIntradayChart({
               variant={interval.isActive ? "default" : "outline"}
               className={interval.isActive 
                 ? "bg-blue-600 hover:bg-blue-700 text-white" 
-                : "border-border text-muted-foreground hover:text-foreground hover:border-border/80"
+                : ""
               }
               onClick={() => onIntervalChange?.(interval.value)}
             >

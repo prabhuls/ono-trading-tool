@@ -35,7 +35,6 @@ export function DashboardHeader({ isLive, activeTimeRange, onRefresh, marketStat
           variant="outline"
           size="sm"
           onClick={onRefresh}
-          className="border-border text-muted-foreground hover:text-foreground hover:border-border/80"
           aria-label="Refresh dashboard data"
         >
           <RefreshCw className="w-4 h-4 mr-2" />

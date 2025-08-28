@@ -67,7 +67,7 @@ export function TopRankedTrade({
             variant="ghost" 
             size="sm" 
             onClick={refreshPrice}
-            className="ml-2 text-muted-foreground hover:text-foreground"
+            className="ml-2 text-muted-foreground"
             disabled={priceLoading || priceRefreshing}
           >
             <RefreshCw className={`h-4 w-4 ${(priceLoading || priceRefreshing) ? 'animate-spin' : ''}`} />
@@ -246,7 +246,7 @@ export function TopRankedTrade({
         </Button>
         <Button 
           variant="outline" 
-          className="w-full border-border text-muted-foreground hover:text-foreground hover:border-border/80"
+          className="w-full"
           onClick={onAdjustMaxCost}
         >
           Adjust Max Cost ({algorithmResult?.spread_cost ? formatCurrency(algorithmResult.spread_cost + 0.01) : '$1.00'})
