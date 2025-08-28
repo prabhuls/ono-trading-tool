@@ -158,7 +158,7 @@ export function DashboardLayout() {
               onAdjustMaxCost={handleAdjustMaxCost}
               onTickerChange={handleTickerChange}
             />
-            <MarketStatus marketStatus={dashboardData.marketStatus} />
+            <MarketStatus />
           </div>
 
           {/* Main Content */}

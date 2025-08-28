@@ -15,8 +15,13 @@ export interface SpreadRecommendation {
 export interface MarketStatus {
   isOpen: boolean;
   nextExpiration: string;
-  volume: string;
-  ivRank: number;
+}
+
+export interface ApiMarketSidebarStatusResponse {
+  isOpen: boolean;
+  market_session: string;
+  next_expiration: string;
+  last_updated: string;
 }
 
 export interface OptionChainData {

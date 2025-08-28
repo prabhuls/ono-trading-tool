@@ -38,7 +38,7 @@ export interface StandardizedError extends Error {
 
 // Create axios instance
 const apiClient: AxiosInstance = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000",
+  baseURL: process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001",
   timeout: 30000,
   headers: {
     "Content-Type": "application/json",
@@ -288,6 +288,7 @@ export const api = {
   // Market status endpoints
   market: {
     status: () => ApiClient.get("/api/v1/market-status/status"),
+    sidebarStatus: () => ApiClient.get("/api/v1/market-data/sidebar-status"),
   },
   
   // Add more API endpoints here

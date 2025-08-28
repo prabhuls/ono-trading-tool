@@ -12,6 +12,7 @@ This is a Trading Tools Boilerplate project with:
 
 Detailed project requirements can be found at `/docs/PROJECT_REQUIREMENTS.md`
 
+
 ## Quick Start
 
 ```bash
@@ -85,6 +86,7 @@ Detailed technical documentation is organized by topic:
 - `/docs/RAILWAY_DEPLOYMENT.md`: Deployment procedures and configuration
 - `/docs/DATABASE_SETUP.md`: Database schema and migration guide
 - `/docs/LOCAL_DEVELOPMENT.md`: Local development setup details
+- `/docs/TheTradeLIst.com EndPoints.pdf`: TradeList API documentation
 
 ## General Development Principles
 

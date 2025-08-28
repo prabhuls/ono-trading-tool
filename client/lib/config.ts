@@ -28,7 +28,7 @@ export function getBackendUrl(): string {
   // 2. Fall back to environment variables (build-time)
   return process.env.NEXT_PUBLIC_BACKEND_URL || 
          process.env.NEXT_PUBLIC_API_URL || 
-         'http://localhost:8000';
+         'http://localhost:8001';
 }
 
 // Export a singleton instance

@@ -4,6 +4,10 @@ import hashlib
 
 from .base import ExternalAPIService, ExternalAPIError
 from app.core.config import settings
+from app.core.logging import get_logger
+from app.core.cache import redis_cache
+
+logger = get_logger(__name__)
 
 
 class PolygonService(ExternalAPIService):
@@ -213,6 +217,114 @@ class PolygonService(ExternalAPIService):
             "currencies": response.get("currencies")
         }
         
+    async def get_vix_data(self, days: int = 252) -> Optional[Dict[str, Any]]:
+        """
+        Get VIX data for IV rank calculation
+        
+        Args:
+            days: Number of days to fetch (default 252 for ~52 weeks)
+            
+        Returns:
+            Dictionary with current VIX, 52-week high, low, and calculated IV rank
+        """
+        try:
+            # Calculate date range
+            to_date = datetime.now().strftime("%Y-%m-%d")
+            from_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+            
+            logger.info(f"Fetching VIX data from {from_date} to {to_date}")
+            
+            # Get VIX aggregates for the past year
+            vix_data = await self.get_aggregates(
+                ticker="I:VIX",  # VIX ticker in Polygon
+                multiplier=1,
+                timespan="day",
+                from_date=from_date,
+                to_date=to_date,
+                limit=days
+            )
+            
+            if not vix_data:
+                logger.warning("No VIX data returned from Polygon API")
+                return None
+                
+            # Extract closing prices
+            vix_closes = [bar.get("c", 0) for bar in vix_data if bar.get("c")]
+            
+            if len(vix_closes) < 50:  # Need reasonable amount of data
+                logger.warning(f"Insufficient VIX data: only {len(vix_closes)} days")
+                return None
+                
+            # Calculate 52-week high, low, and current VIX
+            current_vix = vix_closes[0]  # Most recent (sorted desc)
+            vix_52w_high = max(vix_closes)
+            vix_52w_low = min(vix_closes)
+            
+            # Calculate actual IV rank using proper formula
+            if vix_52w_high > vix_52w_low:
+                iv_rank = ((current_vix - vix_52w_low) / (vix_52w_high - vix_52w_low)) * 100
+            else:
+                iv_rank = 50.0  # Default if no range
+                
+            result = {
+                "current_vix": current_vix,
+                "vix_52w_high": vix_52w_high,
+                "vix_52w_low": vix_52w_low,
+                "iv_rank": round(iv_rank, 1),
+                "data_points": len(vix_closes),
+                "last_updated": datetime.utcnow().isoformat() + "Z"
+            }
+            
+            logger.info(
+                "VIX IV rank calculated",
+                current_vix=current_vix,
+                iv_rank=iv_rank,
+                data_points=len(vix_closes)
+            )
+            
+            return result
+            
+        except ExternalAPIError as e:
+            logger.error("Failed to fetch VIX data from Polygon", error=str(e))
+            return None
+        except Exception as e:
+            logger.error("Error calculating IV rank from VIX data", error=str(e))
+            return None
+    
+    async def get_iv_rank_cached(self) -> Optional[float]:
+        """
+        Get cached IV rank or fetch fresh VIX data
+        
+        Returns:
+            IV rank as float or None if unavailable
+        """
+        try:
+            # Check cache first (cache for 5 minutes)
+            cache_key = "vix_iv_rank"
+            cached_data = redis_cache.get(f"external_api:polygon:{cache_key}")
+            
+            if cached_data is not None:
+                logger.info("Using cached VIX IV rank")
+                return cached_data.get("iv_rank")
+            
+            # Fetch fresh VIX data
+            vix_data = await self.get_vix_data()
+            if not vix_data:
+                return None
+                
+            # Cache the result
+            redis_cache.set(
+                f"external_api:polygon:{cache_key}",
+                vix_data,
+                ttl=300  # 5 minutes
+            )
+            
+            return vix_data.get("iv_rank")
+            
+        except Exception as e:
+            logger.error("Failed to get IV rank", error=str(e))
+            return None
+
     async def health_check(self) -> Dict[str, Any]:
         """Check Polygon API health"""
         try:

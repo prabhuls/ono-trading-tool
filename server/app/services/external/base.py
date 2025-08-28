@@ -208,8 +208,7 @@ class ExternalAPIService(ABC, Generic[T]):
         if method == "GET" and use_cache and self.cache_ttl:
             cache_key = self._get_cache_key(endpoint, params)
             cached_response = redis_cache.get(
-                cache_key,
-                namespace=f"external_api:{self.service_name}"
+                f"external_api:{self.service_name}:{cache_key}"
             )
             if cached_response is not None:
                 self.metrics["cache_hits"] += 1
@@ -268,10 +267,9 @@ class ExternalAPIService(ABC, Generic[T]):
                 if method == "GET" and use_cache and cache_key:
                     ttl = cache_ttl or self.cache_ttl
                     redis_cache.set(
-                        cache_key,
+                        f"external_api:{self.service_name}:{cache_key}",
                         data,
-                        ttl=ttl,
-                        namespace=f"external_api:{self.service_name}"
+                        ttl=ttl
                     )
                     
                 # Add breadcrumb for monitoring

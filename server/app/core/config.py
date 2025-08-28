@@ -134,6 +134,11 @@ class Settings(BaseSettings):
     polygon_api_key: Optional[str] = Field(None, validation_alias="POLYGON_API_KEY")
     polygon_base_url: str = Field(default="https://api.polygon.io", validation_alias="POLYGON_BASE_URL")
     
+    # TheTradeList API
+    thetradelist_api_key: Optional[str] = Field(None, validation_alias="TRADELIST_API_KEY")
+    thetradelist_base_url: str = Field(default="https://api.thetradelist.com", validation_alias="TRADELIST_BASE_URL")
+    market_data_cache_ttl: int = Field(default=30, validation_alias="MARKET_DATA_CACHE_TTL")
+    
     # OAuth configuration (removed - using simple JWT verification)
     # trading_service_auth_url: str = Field(default="https://auth.tradingservice.com", validation_alias="TRADING_SERVICE_AUTH_URL")
     # trading_service_client_id: Optional[str] = Field(None, validation_alias="TRADING_SERVICE_CLIENT_ID")
@@ -287,6 +292,13 @@ class Settings(BaseSettings):
                 "base_url": self.polygon_base_url,
                 "timeout": self.external_api_timeout,
                 "retry_count": self.external_api_retry_count,
+            },
+            "thetradelist": {
+                "api_key": self.thetradelist_api_key,
+                "base_url": self.thetradelist_base_url,
+                "timeout": self.external_api_timeout,
+                "retry_count": self.external_api_retry_count,
+                "cache_ttl": self.market_data_cache_ttl,
             },
             # Add more service configurations here
         }
