@@ -22,7 +22,7 @@ function formatPriceData(data: StockPriceData): StockPriceDisplayData {
   };
 }
 
-// Default fallback data
+// Default fallback data (only used for type safety, not displayed)
 const createDefaultPriceData = (ticker: SupportedTicker): StockPriceDisplayData => ({
   ticker,
   price: 0,
@@ -42,6 +42,7 @@ const createDefaultPriceData = (ticker: SupportedTicker): StockPriceDisplayData 
 export function useStockPrice(ticker: SupportedTicker): UseStockPriceResult {
   const [priceData, setPriceData] = useState<StockPriceDisplayData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
@@ -104,19 +105,22 @@ export function useStockPrice(ticker: SupportedTicker): UseStockPriceResult {
       
       console.error(`Failed to fetch ${ticker} price:`, err);
       
-      // Set fallback data to prevent UI breaking
-      if (!priceData) {
-        setPriceData(createDefaultPriceData(ticker));
-      }
+      // Don't set fallback data - let the UI handle the null state properly
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [ticker]);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
+    // Use refreshing state for manual refresh, loading state for initial load
+    if (priceData) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     await fetchStockPrice();
-  }, [fetchStockPrice]);
+  }, [fetchStockPrice, priceData]);
 
   useEffect(() => {
     // Initial fetch when ticker changes
@@ -126,6 +130,7 @@ export function useStockPrice(ticker: SupportedTicker): UseStockPriceResult {
   return {
     priceData,
     loading,
+    refreshing,
     error,
     refresh,
     lastUpdated,
@@ -208,14 +213,7 @@ export function useMultipleStockPrices(tickers: SupportedTicker[]) {
       
       console.error('Failed to fetch multiple stock prices:', err);
       
-      // Set fallback data for any missing tickers
-      const newPricesData = { ...pricesData };
-      tickers.forEach((ticker) => {
-        if (!newPricesData[ticker]) {
-          newPricesData[ticker] = createDefaultPriceData(ticker);
-        }
-      });
-      setPricesData(newPricesData);
+      // Don't set fallback data - let the UI handle the null states properly
     } finally {
       setLoading(false);
     }

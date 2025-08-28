@@ -29,28 +29,29 @@ export function TopRankedTrade({
   const { 
     priceData, 
     loading: priceLoading, 
+    refreshing: priceRefreshing,
     error: priceError,
     refresh: refreshPrice 
   } = useStockPrice(activeTicker as SupportedTicker);
   
-  // Use API price if available, fallback to prop
-  const displayPrice = priceData?.price || currentSpyPrice;
-  const priceChange = priceData?.change || 0;
-  const priceChangePercent = priceData?.change_percent || 0;
-  const isPositive = priceChange >= 0;
+  // Use only real API price data, no hardcoded fallback
+  const displayPrice = priceData?.price;
+  const priceChange = priceData?.change;
+  const priceChangePercent = priceData?.change_percent;
+  const isPositive = (priceChange ?? 0) >= 0;
   return (
     <div className="space-y-4">
       {/* Current Price */}
       <div className="text-center">
         <div className="flex items-center justify-center gap-2 mb-2">
           <div className="text-4xl font-bold text-foreground">
-            {priceLoading ? (
-              <div className="animate-pulse">
-                {formatCurrency(currentSpyPrice)}
-              </div>
-            ) : priceError ? (
+            {priceError ? (
               <div className="text-red-400 text-lg">
                 Price Unavailable
+              </div>
+            ) : !displayPrice ? (
+              <div className="animate-pulse text-muted-foreground">
+                Loading...
               </div>
             ) : (
               formatCurrency(displayPrice)
@@ -61,14 +62,14 @@ export function TopRankedTrade({
             size="sm" 
             onClick={refreshPrice}
             className="ml-2 text-muted-foreground hover:text-foreground"
-            disabled={priceLoading}
+            disabled={priceLoading || priceRefreshing}
           >
-            <RefreshCw className={`h-4 w-4 ${priceLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${(priceLoading || priceRefreshing) ? 'animate-spin' : ''}`} />
           </Button>
         </div>
         
         {/* Price Change Info */}
-        {priceData && !priceError && (
+        {priceData && !priceError && priceChange !== undefined && priceChangePercent !== undefined && (
           <div className={`text-sm font-medium mb-1 ${
             isPositive ? 'text-green-400' : 'text-red-400'
           }`}>

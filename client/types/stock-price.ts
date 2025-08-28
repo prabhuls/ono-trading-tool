@@ -37,6 +37,7 @@ export interface StockPriceDisplayData extends StockPriceData {
 export interface UseStockPriceResult {
   priceData: StockPriceDisplayData | null;
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
   refresh: () => Promise<void>;
   lastUpdated: Date | null;
