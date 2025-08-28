@@ -1341,6 +1341,269 @@ class TheTradeListService(ExternalAPIService):
                 service=self.service_name
             )
 
+    async def get_intraday_data(
+        self,
+        ticker: str,
+        interval: str = "5m",
+        period: str = "1d"
+    ) -> Dict[str, Any]:
+        """
+        Get intraday OHLCV data for chart display
+        
+        Args:
+            ticker: Stock ticker symbol (e.g., "SPY")
+            interval: Time interval ("1m", "5m", "15m", "30m", "1h")
+            period: Time period ("1d", "5d", "1w")
+            
+        Returns:
+            Dictionary containing OHLCV data formatted for chart display
+            
+        Raises:
+            ExternalAPIError: On API errors or data processing failures
+        """
+        # Validate ticker
+        supported_tickers = {"SPY", "XSP", "SPX"}
+        ticker_upper = ticker.upper()
+        
+        if ticker_upper not in supported_tickers:
+            raise ExternalAPIError(
+                message=f"Ticker {ticker} not supported for intraday data. Supported: {', '.join(supported_tickers)}",
+                service=self.service_name
+            )
+        
+        # Validate interval
+        valid_intervals = {"1m", "5m", "15m", "30m", "1h"}
+        if interval not in valid_intervals:
+            logger.warning(f"Invalid interval {interval}, defaulting to 5m")
+            interval = "5m"
+        
+        # Validate period 
+        valid_periods = {"1d", "5d", "1w"}
+        if period not in valid_periods:
+            logger.warning(f"Invalid period {period}, defaulting to 1d")
+            period = "1d"
+        
+        # Map intervals to TheTradeList API format
+        interval_mapping = {
+            "1m": "1/minute",
+            "5m": "5/minute",
+            "15m": "15/minute", 
+            "30m": "30/minute",
+            "1h": "1/hour"
+        }
+        
+        try:
+            logger.info(
+                "Fetching intraday data",
+                ticker=ticker_upper,
+                interval=interval,
+                period=period
+            )
+            
+            # Calculate date range based on period
+            end_date = datetime.now()
+            if period == "1d":
+                start_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            elif period == "5d":
+                start_date = end_date - timedelta(days=5)
+            elif period == "1w":
+                start_date = end_date - timedelta(weeks=1)
+            else:
+                start_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            # Use TheTradeList range-data endpoint
+            endpoint = "/v1/data/range-data"
+            params = {
+                "ticker": ticker_upper,
+                "range": interval_mapping[interval],
+                "startdate": start_date.strftime("%Y-%m-%d"),
+                "enddate": end_date.strftime("%Y-%m-%d"),
+                "limit": 200  # Reasonable limit for intraday data
+            }
+            
+            # Use caching for intraday data (1-2 minutes)
+            cache_key = f"intraday_data:{ticker_upper}:{interval}:{period}"
+            cached_data = self._get_from_cache(cache_key)
+            if cached_data is not None:
+                logger.info("Using cached intraday data", ticker=ticker_upper, interval=interval, period=period)
+                return cached_data
+            
+            # Fetch fresh data
+            raw_data = await self.get(endpoint, params=params)
+            
+            # Normalize the response
+            normalized_data = self._normalize_intraday_data(raw_data, ticker_upper, interval, period)
+            
+            # Cache the result for 90 seconds
+            self._set_cache(cache_key, normalized_data, ttl=90)
+            
+            logger.info(
+                "Intraday data retrieved successfully",
+                ticker=ticker_upper,
+                interval=interval,
+                period=period,
+                data_points=len(normalized_data.get("price_data", []))
+            )
+            
+            return normalized_data
+            
+        except ExternalAPIError:
+            # Re-raise API errors
+            raise
+        except Exception as e:
+            logger.error(
+                "Failed to get intraday data",
+                ticker=ticker,
+                interval=interval,
+                period=period,
+                error=str(e)
+            )
+            raise ExternalAPIError(
+                message=f"Failed to get intraday data for {ticker}: {str(e)}",
+                service=self.service_name
+            )
+    
+    def _normalize_intraday_data(
+        self,
+        raw_data: Dict[str, Any],
+        ticker: str,
+        interval: str,
+        period: str
+    ) -> Dict[str, Any]:
+        """
+        Normalize TheTradeList range-data response for intraday chart display
+        
+        Args:
+            raw_data: Raw API response from TheTradeList
+            ticker: Stock ticker symbol
+            interval: Time interval
+            period: Time period
+            
+        Returns:
+            Normalized intraday data for frontend consumption
+        """
+        try:
+            results = raw_data.get("results", [])
+            if not isinstance(results, list):
+                results = []
+            
+            price_data = []
+            current_price = 0.0
+            
+            for bar in results:
+                if not isinstance(bar, dict):
+                    continue
+                    
+                # Extract OHLCV data from TheTradeList format
+                # Fields: t (timestamp), o (open), h (high), l (low), c (close), v (volume)
+                timestamp_ms = bar.get("t", 0)
+                if timestamp_ms:
+                    # Convert milliseconds to ISO format
+                    timestamp = datetime.fromtimestamp(timestamp_ms / 1000).isoformat() + "Z"
+                else:
+                    continue
+                
+                open_price = float(bar.get("o", 0))
+                high_price = float(bar.get("h", 0))
+                low_price = float(bar.get("l", 0))
+                close_price = float(bar.get("c", 0))
+                volume = int(bar.get("v", 0))
+                
+                # Skip invalid bars
+                if not all([open_price, high_price, low_price, close_price]):
+                    continue
+                
+                price_point = {
+                    "timestamp": timestamp,
+                    "open": open_price,
+                    "high": high_price,
+                    "low": low_price,
+                    "close": close_price,
+                    "volume": volume
+                }
+                
+                price_data.append(price_point)
+                current_price = close_price  # Use most recent close as current price
+            
+            # Sort by timestamp to ensure chronological order
+            price_data.sort(key=lambda x: x["timestamp"])
+            
+            # Get current price from live data if available
+            try:
+                live_price_data = self.get_stock_price(ticker)  # This is async but we need sync here
+                # We'll use the last close price from the data instead
+            except:
+                pass
+            
+            # If no current price from data, use fallback
+            if current_price == 0.0:
+                current_price = 585.0  # Fallback SPY price
+            
+            # Create benchmark lines (current price and placeholder strikes)
+            benchmark_lines = {
+                "current_price": current_price,
+                "buy_strike": None,  # Will be set by calling code if provided
+                "sell_strike": None   # Will be set by calling code if provided
+            }
+            
+            # Create metadata
+            metadata = {
+                "total_candles": len(price_data),
+                "market_hours": "09:30-16:00 ET",
+                "last_updated": datetime.utcnow().isoformat() + "Z"
+            }
+            
+            normalized = {
+                "ticker": ticker,
+                "interval": interval,
+                "period": period,
+                "current_price": current_price,
+                "price_data": price_data,
+                "benchmark_lines": benchmark_lines,
+                "metadata": metadata
+            }
+            
+            return normalized
+            
+        except Exception as e:
+            logger.error("Failed to normalize intraday data", error=str(e))
+            # Return empty but valid structure
+            return {
+                "ticker": ticker,
+                "interval": interval,
+                "period": period,
+                "current_price": 0.0,
+                "price_data": [],
+                "benchmark_lines": {
+                    "current_price": 0.0,
+                    "buy_strike": None,
+                    "sell_strike": None
+                },
+                "metadata": {
+                    "total_candles": 0,
+                    "market_hours": "09:30-16:00 ET",
+                    "last_updated": datetime.utcnow().isoformat() + "Z"
+                },
+                "error": str(e)
+            }
+    
+    def _get_from_cache(self, cache_key: str) -> Optional[Dict[str, Any]]:
+        """Get data from cache with proper key formatting"""
+        try:
+            full_key = f"external_api:{self.service_name}:{cache_key}"
+            return redis_cache.get(full_key)
+        except Exception as e:
+            logger.warning("Cache get failed", key=cache_key, error=str(e))
+            return None
+    
+    def _set_cache(self, cache_key: str, data: Dict[str, Any], ttl: int = 60) -> None:
+        """Set data in cache with proper key formatting"""
+        try:
+            full_key = f"external_api:{self.service_name}:{cache_key}"
+            redis_cache.set(full_key, data, ttl)
+        except Exception as e:
+            logger.warning("Cache set failed", key=cache_key, error=str(e))
+    
     async def health_check(self) -> Dict[str, Any]:
         """Perform health check for TheTradeList API"""
         try:

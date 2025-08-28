@@ -322,5 +322,25 @@ export const api = {
     getAlgorithmHealth: () => ApiClient.get("/api/v1/option-chain/algorithm/health"),
   },
   
+  // Chart data endpoints
+  chartData: {
+    getIntradayData: (
+      ticker: string, 
+      params?: {
+        interval?: string;
+        buy_strike?: number;
+        sell_strike?: number;
+      }
+    ) => {
+      const queryParams = new URLSearchParams();
+      if (params?.interval) queryParams.append('interval', params.interval);
+      if (params?.buy_strike) queryParams.append('buy_strike', params.buy_strike.toString());
+      if (params?.sell_strike) queryParams.append('sell_strike', params.sell_strike.toString());
+      
+      const queryString = queryParams.toString();
+      return ApiClient.get(`/api/v1/market-data/intraday/${ticker}${queryString ? `?${queryString}` : ''}`);
+    },
+  },
+  
   // Add more API endpoints here
 };

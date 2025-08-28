@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, Path, Query, HTTPException
 from fastapi.responses import JSONResponse
 
@@ -12,7 +12,8 @@ from app.schemas.market_data import (
     EnhancedMarketStatusResponse,
     MarketHealthResponse,
     SingleStockPriceResponse,
-    MultipleStockPricesResponse
+    MultipleStockPricesResponse,
+    IntradayChartResponse
 )
 from app.services.market_status_enhanced_service import get_market_status_enhanced_service
 from app.services.external.thetradelist_service import get_thetradelist_service
@@ -492,6 +493,137 @@ async def get_spy_price(
         return create_error_response(
             error_code=ErrorCode.INTERNAL_ERROR,
             message="Failed to retrieve SPY price",
+            status_code=500,
+            error_details={
+                "error_type": type(e).__name__,
+                "details": str(e)
+            }
+        )
+
+
+@router.get(
+    "/intraday/{ticker}",
+    response_model=IntradayChartResponse,
+    summary="Get intraday chart data for a ticker",
+    description="Get real-time intraday OHLCV data for chart display with optional benchmark strikes",
+    operation_id="get_intraday_chart_data"
+)
+@monitor_performance("api.market_data.intraday_chart")
+@capture_errors(level="error")
+async def get_intraday_chart_data(
+    ticker: str = Path(..., description="Stock ticker symbol (SPY, XSP, SPX)", regex="^(SPY|XSP|SPX)$"),
+    interval: str = Query("5m", description="Time interval", regex="^(1m|5m|15m|30m|1h)$"),
+    period: str = Query("1d", description="Time period", regex="^(1d|5d|1w)$"),
+    buy_strike: Optional[float] = Query(None, description="Buy strike price for benchmark line", ge=0),
+    sell_strike: Optional[float] = Query(None, description="Sell strike price for benchmark line", ge=0),
+    current_user = Depends(optional_user)
+) -> JSONResponse:
+    """
+    Get intraday chart data for SPY panel with real market data
+    
+    Retrieves OHLCV intraday data for chart visualization including:
+    - Price candles with open, high, low, close, volume
+    - Current market price 
+    - Optional benchmark strike lines
+    - Market hours metadata
+    
+    Supports different time intervals (1m, 5m, 15m, 30m, 1h) and periods (1d, 5d, 1w).
+    Data is cached for 60-120 seconds for real-time feel while managing API limits.
+    
+    Args:
+        ticker: Stock ticker symbol (SPY, XSP, SPX)
+        interval: Time interval between data points (default: "5m")
+        period: Time period for historical data (default: "1d")  
+        buy_strike: Optional buy strike price for benchmark line
+        sell_strike: Optional sell strike price for benchmark line
+        
+    Returns:
+        JSONResponse with intraday chart data including OHLCV candles and benchmark lines
+        
+    Raises:
+        HTTPException: 400 for invalid ticker/params, 503 for API unavailable, 500 for server errors
+    """
+    try:
+        logger.info(
+            "Fetching intraday chart data",
+            ticker=ticker.upper(),
+            interval=interval,
+            period=period,
+            buy_strike=buy_strike,
+            sell_strike=sell_strike,
+            user_id=getattr(current_user, 'id', None) if current_user else None
+        )
+        
+        # Get TheTradeList service
+        tradelist_service = get_thetradelist_service()
+        
+        # Create cache key including benchmark strikes
+        strikes_key = f"{buy_strike or 'none'}:{sell_strike or 'none'}"
+        cache_key = f"intraday_chart:{ticker.upper()}:{interval}:{period}:{strikes_key}"
+        
+        # Check cache first
+        cached_data = redis_cache.get(cache_key)
+        if cached_data is not None:
+            logger.info("Using cached intraday chart data", ticker=ticker.upper(), interval=interval, period=period)
+            
+            return create_success_response(
+                data=cached_data,
+                message=f"Intraday chart data for {ticker.upper()} retrieved successfully (cached)"
+            )
+        
+        # Fetch fresh intraday data
+        chart_data = await tradelist_service.get_intraday_data(
+            ticker=ticker,
+            interval=interval,
+            period=period
+        )
+        
+        # Add benchmark strikes if provided
+        if buy_strike is not None:
+            chart_data["benchmark_lines"]["buy_strike"] = float(buy_strike)
+        if sell_strike is not None:
+            chart_data["benchmark_lines"]["sell_strike"] = float(sell_strike)
+        
+        # Cache the result for 90 seconds (real-time feel)
+        redis_cache.set(cache_key, chart_data, ttl=90)
+        
+        logger.info(
+            "Intraday chart data retrieved successfully",
+            ticker=ticker.upper(),
+            interval=interval,
+            period=period,
+            data_points=len(chart_data.get("price_data", [])),
+            current_price=chart_data.get("current_price", 0),
+            buy_strike=buy_strike,
+            sell_strike=sell_strike
+        )
+        
+        return create_success_response(
+            data=chart_data,
+            message=f"Intraday chart data for {ticker.upper()} retrieved successfully"
+        )
+        
+    except ExternalAPIError as e:
+        logger.error("External API error fetching intraday chart data", ticker=ticker, error=str(e))
+        if "not supported" in str(e).lower():
+            return create_error_response(
+                error_code=ErrorCode.VALIDATION_ERROR,
+                message=f"Ticker {ticker} is not supported for intraday data",
+                status_code=400,
+                error_details={"supported_tickers": ["SPY", "XSP", "SPX"]}
+            )
+        else:
+            return create_error_response(
+                error_code=ErrorCode.EXTERNAL_API_ERROR,
+                message="Intraday chart data temporarily unavailable",
+                status_code=503,
+                error_details={"service": "TheTradeList API"}
+            )
+    except Exception as e:
+        logger.error("Failed to fetch intraday chart data", ticker=ticker, error=str(e))
+        return create_error_response(
+            error_code=ErrorCode.INTERNAL_ERROR,
+            message=f"Failed to retrieve intraday chart data for {ticker}",
             status_code=500,
             error_details={
                 "error_type": type(e).__name__,

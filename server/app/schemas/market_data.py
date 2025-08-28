@@ -180,3 +180,213 @@ class MultipleStockPricesResponse(BaseModel):
         }
 
 
+class IntradayDataPoint(BaseModel):
+    """Individual intraday OHLCV data point"""
+    
+    timestamp: str = Field(
+        ...,
+        description="Timestamp in ISO format with Z"
+    )
+    open: float = Field(
+        ...,
+        description="Opening price for this time period",
+        ge=0
+    )
+    high: float = Field(
+        ...,
+        description="Highest price for this time period",
+        ge=0
+    )
+    low: float = Field(
+        ...,
+        description="Lowest price for this time period",
+        ge=0
+    )
+    close: float = Field(
+        ...,
+        description="Closing price for this time period",
+        ge=0
+    )
+    volume: int = Field(
+        ...,
+        description="Volume for this time period",
+        ge=0
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "timestamp": "2025-08-28T09:30:00Z",
+                "open": 584.50,
+                "high": 585.20,
+                "low": 584.30,
+                "close": 584.80,
+                "volume": 12450
+            }
+        }
+
+
+class BenchmarkLines(BaseModel):
+    """Benchmark lines for chart display"""
+    
+    current_price: float = Field(
+        ...,
+        description="Current market price of the underlying asset",
+        ge=0
+    )
+    buy_strike: Optional[float] = Field(
+        None,
+        description="Recommended buy strike price",
+        ge=0
+    )
+    sell_strike: Optional[float] = Field(
+        None,
+        description="Recommended sell strike price", 
+        ge=0
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "current_price": 585.18,
+                "buy_strike": 580.0,
+                "sell_strike": 581.0
+            }
+        }
+
+
+class IntradayMetadata(BaseModel):
+    """Metadata for intraday chart data"""
+    
+    total_candles: int = Field(
+        ...,
+        description="Total number of data points returned",
+        ge=0
+    )
+    market_hours: str = Field(
+        ...,
+        description="Market trading hours"
+    )
+    last_updated: str = Field(
+        ...,
+        description="When data was last updated (ISO format with Z)"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "total_candles": 78,
+                "market_hours": "09:30-16:00 ET",
+                "last_updated": "2025-08-28T15:25:00Z"
+            }
+        }
+
+
+class IntradayChartData(BaseModel):
+    """Complete intraday chart data response"""
+    
+    ticker: str = Field(
+        ...,
+        description="Stock ticker symbol"
+    )
+    interval: str = Field(
+        ...,
+        description="Time interval between data points",
+        pattern="^(1m|5m|15m|30m|1h)$"
+    )
+    period: str = Field(
+        ...,
+        description="Time period for data",
+        pattern="^(1d|5d|1w)$"
+    )
+    current_price: float = Field(
+        ...,
+        description="Most recent price",
+        ge=0
+    )
+    price_data: List[IntradayDataPoint] = Field(
+        ...,
+        description="Array of OHLCV data points"
+    )
+    benchmark_lines: BenchmarkLines = Field(
+        ...,
+        description="Benchmark strike levels for chart display"
+    )
+    metadata: IntradayMetadata = Field(
+        ...,
+        description="Additional metadata about the data"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "ticker": "SPY",
+                "interval": "5m",
+                "period": "1d",
+                "current_price": 585.18,
+                "price_data": [
+                    {
+                        "timestamp": "2025-08-28T09:30:00Z",
+                        "open": 584.50,
+                        "high": 585.20,
+                        "low": 584.30,
+                        "close": 584.80,
+                        "volume": 12450
+                    }
+                ],
+                "benchmark_lines": {
+                    "current_price": 585.18,
+                    "buy_strike": 580.0,
+                    "sell_strike": 581.0
+                },
+                "metadata": {
+                    "total_candles": 78,
+                    "market_hours": "09:30-16:00 ET",
+                    "last_updated": "2025-08-28T15:25:00Z"
+                }
+            }
+        }
+
+
+class IntradayChartResponse(BaseModel):
+    """Response model for intraday chart endpoint"""
+    
+    success: bool = Field(..., description="Whether the request was successful")
+    data: IntradayChartData = Field(..., description="Intraday chart data")
+    message: str = Field(..., description="Response message")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "data": {
+                    "ticker": "SPY",
+                    "interval": "5m",
+                    "period": "1d",
+                    "current_price": 585.18,
+                    "price_data": [
+                        {
+                            "timestamp": "2025-08-28T09:30:00Z",
+                            "open": 584.50,
+                            "high": 585.20,
+                            "low": 584.30,
+                            "close": 584.80,
+                            "volume": 12450
+                        }
+                    ],
+                    "benchmark_lines": {
+                        "current_price": 585.18,
+                        "buy_strike": 580.0,
+                        "sell_strike": 581.0
+                    },
+                    "metadata": {
+                        "total_candles": 78,
+                        "market_hours": "09:30-16:00 ET",
+                        "last_updated": "2025-08-28T15:25:00Z"
+                    }
+                },
+                "message": "Intraday chart data retrieved successfully"
+            }
+        }
+
+

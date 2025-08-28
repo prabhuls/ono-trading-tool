@@ -120,3 +120,40 @@ export interface AlgorithmHealthResponse {
   };
   message: string;
 }
+
+// Chart Data Types for Intraday API
+export interface IntradayDataPoint {
+  timestamp: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface BenchmarkLines {
+  current_price: number;
+  buy_strike?: number | null;
+  sell_strike?: number | null;
+}
+
+export interface IntradayChartMetadata {
+  total_candles: number;
+  market_hours: string;
+  last_updated: string;
+}
+
+export interface IntradayChartData {
+  ticker: string;
+  interval: string;
+  current_price: number;
+  price_data: IntradayDataPoint[];
+  benchmark_lines: BenchmarkLines;
+  metadata: IntradayChartMetadata;
+}
+
+export interface IntradayChartResponse {
+  success: boolean;
+  data: IntradayChartData;
+  message: string;
+}
