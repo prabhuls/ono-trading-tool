@@ -1,7 +1,8 @@
 """
 Stock and market data models
 """
-from datetime import datetime, date
+from datetime import datetime
+from datetime import date as date_type
 from typing import Optional
 from decimal import Decimal
 
@@ -31,7 +32,7 @@ class Stock(Base):
     variability_3day: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     passed_variability_check: Mapped[bool] = mapped_column(Boolean, default=False)
     special_character: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)
-    last_verified: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    last_verified: Mapped[Optional[date_type]] = mapped_column(Date, nullable=True)
     last_updated: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -48,7 +49,7 @@ class HistoricalData(Base):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     symbol: Mapped[str] = mapped_column(String(20), nullable=False)
-    date: Mapped[date] = mapped_column(Date, nullable=False)
+    date: Mapped[date_type] = mapped_column(Date, nullable=False)
     open: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
     high: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
     low: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
@@ -70,7 +71,7 @@ class EMACache(Base):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     symbol: Mapped[str] = mapped_column(String(20), nullable=False)
-    date: Mapped[date] = mapped_column(Date, nullable=False)
+    date: Mapped[date_type] = mapped_column(Date, nullable=False)
     ema22: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 4), nullable=True)
     ema53: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 4), nullable=True)
     ema208: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 4), nullable=True)

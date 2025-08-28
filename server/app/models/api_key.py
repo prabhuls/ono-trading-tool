@@ -2,7 +2,7 @@
 API Key model for storing encrypted external API credentials
 """
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
 from sqlalchemy import String, DateTime, Text, ForeignKey, UniqueConstraint
@@ -55,14 +55,14 @@ class APIKey(Base):
         nullable=False,
         comment="Encrypted API key value"
     )
-    encrypted_secret: Mapped[str | None] = mapped_column(
+    encrypted_secret: Mapped[Optional[str]] = mapped_column(
         Text,
         nullable=True,
         comment="Encrypted API secret (if applicable)"
     )
     
     # Metadata
-    description: Mapped[str | None] = mapped_column(
+    description: Mapped[Optional[str]] = mapped_column(
         Text,
         nullable=True,
         comment="Optional description or notes"
@@ -80,7 +80,7 @@ class APIKey(Base):
         default=datetime.utcnow,
         onupdate=datetime.utcnow
     )
-    last_used_at: Mapped[datetime | None] = mapped_column(
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
         comment="Last time this API key was used"

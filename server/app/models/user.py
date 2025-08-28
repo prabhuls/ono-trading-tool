@@ -2,7 +2,7 @@
 User model for authentication and user management
 """
 from datetime import datetime
-from typing import List, TYPE_CHECKING, Dict, Any
+from typing import List, TYPE_CHECKING, Dict, Any, Optional, Union
 from uuid import uuid4
 
 from sqlalchemy import String, Boolean, DateTime, Text, JSON
@@ -30,7 +30,7 @@ class User(Base):
     )
     
     # External authentication
-    external_auth_id: Mapped[str | None] = mapped_column(
+    external_auth_id: Mapped[Optional[str]] = mapped_column(
         String(255),
         unique=True,
         nullable=True,
@@ -45,7 +45,7 @@ class User(Base):
         nullable=False,
         index=True
     )
-    username: Mapped[str | None] = mapped_column(
+    username: Mapped[Optional[str]] = mapped_column(
         String(100),
         unique=True,
         nullable=True,
@@ -57,10 +57,10 @@ class User(Base):
     )
     
     # User information
-    full_name: Mapped[str | None] = mapped_column(String(255))
+    full_name: Mapped[Optional[str]] = mapped_column(String(255))
     
     # Subscription data from trading service
-    subscription_data: Mapped[Dict[str, Any] | None] = mapped_column(
+    subscription_data: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         JSON,
         nullable=True,
         comment="User's subscription data from trading service"
@@ -95,7 +95,7 @@ class User(Base):
         default=datetime.utcnow,
         onupdate=datetime.utcnow
     )
-    last_login_at: Mapped[datetime | None] = mapped_column(
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
         nullable=True
     )

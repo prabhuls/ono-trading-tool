@@ -5,9 +5,10 @@ interface DashboardHeaderProps {
   isLive: boolean;
   activeTimeRange: string;
   onRefresh?: () => void;
+  marketStatusError?: string | null;
 }
 
-export function DashboardHeader({ isLive, activeTimeRange, onRefresh }: DashboardHeaderProps) {
+export function DashboardHeader({ isLive, activeTimeRange, onRefresh, marketStatusError }: DashboardHeaderProps) {
   return (
     <div className="flex justify-between items-center mb-6">
       <h1 className="text-2xl font-bold text-foreground">Overnight Options Assistant</h1>
@@ -15,12 +16,18 @@ export function DashboardHeader({ isLive, activeTimeRange, onRefresh }: Dashboar
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground">Status:</span>
-          <span className="text-foreground">Active: {activeTimeRange}</span>
-          {isLive && (
+          {marketStatusError ? (
+            <span className="text-red-400 text-sm" title={marketStatusError}>
+              Status Unavailable
+            </span>
+          ) : isLive ? (
             <>
+              <span className="text-foreground">Active: {activeTimeRange}</span>
               <div className="live-indicator ml-2"></div>
               <span className="text-sm text-green-500">Live</span>
             </>
+          ) : (
+            <span className="text-muted-foreground">Offline</span>
           )}
         </div>
         

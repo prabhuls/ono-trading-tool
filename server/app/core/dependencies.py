@@ -1,7 +1,7 @@
 """
 Common dependencies for FastAPI endpoints
 """
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -82,7 +82,7 @@ class OptionalDatabase:
                 # Fallback logic
     """
     
-    async def __call__(self) -> AsyncSession | None:
+    async def __call__(self) -> Optional[AsyncSession]:
         if not settings.enable_database:
             return None
         

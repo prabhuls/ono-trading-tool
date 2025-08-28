@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from .endpoints import health, example, users, auth
+from .endpoints import health, example, users, auth, market_status
 from app.api.endpoints import credit_spread, market, claims, chart_data, credit_spreads, user_spreads
 
 
@@ -12,6 +12,7 @@ api_router.include_router(health.router, prefix="/health", tags=["health"])
 api_router.include_router(example.router, prefix="/example", tags=["example"])
 api_router.include_router(auth.router, prefix="/auth", tags=["authentication"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])
+api_router.include_router(market_status.router, prefix="/market-status", tags=["market-status"])
 api_router.include_router(credit_spread.router, prefix="/credit-spread", tags=["credit-spread"])
 api_router.include_router(market.router, prefix="/market", tags=["market"])
 api_router.include_router(claims.router, prefix="/claims", tags=["claims"])

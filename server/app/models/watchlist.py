@@ -2,7 +2,7 @@
 Watchlist model for storing user's stock/crypto watchlists
 """
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Dict, Any
+from typing import TYPE_CHECKING, List, Dict, Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import String, DateTime, JSON, ForeignKey, UniqueConstraint, Integer, Boolean
@@ -44,7 +44,7 @@ class Watchlist(Base):
         nullable=False,
         comment="Watchlist name"
     )
-    description: Mapped[str | None] = mapped_column(
+    description: Mapped[Optional[str]] = mapped_column(
         String(500),
         nullable=True,
         comment="Optional description"

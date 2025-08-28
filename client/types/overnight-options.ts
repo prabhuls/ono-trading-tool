@@ -50,3 +50,12 @@ export interface StatusBarInfo {
   demoMode: string;
   scannerActive: string;
 }
+
+export interface ApiMarketStatusResponse {
+  is_live: boolean;
+  active_time_range: string;
+  current_time_et: string;
+  session_start_utc: string;
+  session_end_utc: string;
+  next_active_session: string | null;
+}

@@ -8,32 +8,70 @@ import { SpyIntradayChart } from './spy-intraday-chart';
 import { OptionChainOptimizer } from './option-chain-optimizer';
 import { StatusBars } from './status-bars';
 import { mockDashboardData, mockStatusBars } from '@/lib/mock-data/overnight-options';
+import { api } from '@/lib/api';
+import type { ApiMarketStatusResponse } from '@/types/overnight-options';
 
 export function DashboardLayout() {
   const [dashboardData, setDashboardData] = useState(mockDashboardData);
   const [activeTicker, setActiveTicker] = useState('SPY');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [marketStatusError, setMarketStatusError] = useState<string | null>(null);
+
+  // Fetch market status from API
+  const fetchMarketStatus = async (): Promise<void> => {
+    try {
+      setMarketStatusError(null);
+      const response = await api.market.status();
+      
+      if (response.success && response.data) {
+        const marketStatus = response.data as ApiMarketStatusResponse;
+        
+        // Update dashboard data with API response
+        setDashboardData(prev => ({
+          ...prev,
+          isLive: marketStatus.is_live,
+          activeTimeRange: marketStatus.active_time_range
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to fetch market status:', error);
+      setMarketStatusError('Unable to fetch real-time market status');
+    }
+  };
 
   useEffect(() => {
-    // Simulate data loading
     const loadData = async () => {
       try {
-        // Simulate loading delay
+        setIsLoading(true);
+        
+        // Load initial dashboard data (keep mock data for other components)
         await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Fetch real market status
+        await fetchMarketStatus();
+        
         setIsLoading(false);
       } catch (err) {
         setError('Failed to load dashboard data');
         setIsLoading(false);
       }
     };
+    
     loadData();
+
+    // Set up periodic polling for market status during potential active hours
+    const interval = setInterval(() => {
+      fetchMarketStatus();
+    }, 30000); // Poll every 30 seconds
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleRefresh = (): void => {
     try {
-      // In a real app, this would fetch fresh data
-      // For now, just prevent any errors
+      // Fetch fresh market status data
+      fetchMarketStatus();
     } catch (error) {
       // Silent fail for now (no monitoring setup)
     }
@@ -105,6 +143,7 @@ export function DashboardLayout() {
           isLive={dashboardData.isLive}
           activeTimeRange={dashboardData.activeTimeRange}
           onRefresh={handleRefresh}
+          marketStatusError={marketStatusError}
         />
 
         {/* Main Layout */}

@@ -285,5 +285,10 @@ export const api = {
     delete: (id: string) => ApiClient.delete(`/api/v1/example/items/${id}`),
   },
   
+  // Market status endpoints
+  market: {
+    status: () => ApiClient.get("/api/v1/market-status/status"),
+  },
+  
   // Add more API endpoints here
 };
