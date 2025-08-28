@@ -826,6 +826,171 @@ class TheTradeListService(ExternalAPIService):
             "status": "fallback"
         }
     
+    async def get_stock_price(self, ticker: str) -> Dict[str, Any]:
+        """
+        Get current price for a single stock ticker
+        
+        Args:
+            ticker: Stock ticker symbol (e.g., "SPY", "XSP", "SPX")
+            
+        Returns:
+            Stock price data with normalized format
+            
+        Raises:
+            ExternalAPIError: On API errors or invalid ticker
+        """
+        # Validate ticker is one of the supported symbols
+        supported_tickers = {"SPY", "XSP", "SPX"}
+        ticker_upper = ticker.upper()
+        
+        if ticker_upper not in supported_tickers:
+            raise ExternalAPIError(
+                message=f"Ticker {ticker} not supported. Supported tickers: {', '.join(supported_tickers)}",
+                service=self.service_name
+            )
+        
+        try:
+            logger.info("Fetching stock price", ticker=ticker_upper)
+            
+            # Use existing market snapshot method with specific ticker
+            snapshot_data = await self.get_market_snapshot(tickers=f"{ticker_upper},")
+            
+            # Extract ticker data from response
+            tickers = snapshot_data.get("tickers", [])
+            if not tickers:
+                raise ExternalAPIError(
+                    message=f"No price data found for ticker {ticker_upper}",
+                    service=self.service_name
+                )
+            
+            # Find the specific ticker in the response
+            ticker_data = None
+            for ticker_info in tickers:
+                if isinstance(ticker_info, dict) and ticker_info.get("ticker") == ticker_upper:
+                    ticker_data = ticker_info
+                    break
+            
+            if not ticker_data:
+                raise ExternalAPIError(
+                    message=f"Ticker {ticker_upper} not found in API response",
+                    service=self.service_name
+                )
+            
+            # Normalize the response format
+            normalized_data = {
+                "ticker": ticker_data.get("ticker", ticker_upper),
+                "price": float(ticker_data.get("price", 0)),
+                "change": float(ticker_data.get("change", 0)),
+                "change_percent": float(ticker_data.get("change_percent", 0)),
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
+            
+            logger.info(
+                "Stock price retrieved successfully",
+                ticker=ticker_upper,
+                price=normalized_data["price"],
+                change=normalized_data["change"]
+            )
+            
+            return normalized_data
+            
+        except ExternalAPIError:
+            # Re-raise API errors
+            raise
+        except Exception as e:
+            logger.error("Failed to get stock price", ticker=ticker, error=str(e))
+            raise ExternalAPIError(
+                message=f"Failed to get price for {ticker}: {str(e)}",
+                service=self.service_name
+            )
+
+    async def get_multiple_stock_prices(self, tickers: List[str]) -> Dict[str, Any]:
+        """
+        Get current prices for multiple stock tickers
+        
+        Args:
+            tickers: List of stock ticker symbols (e.g., ["SPY", "XSP", "SPX"])
+            
+        Returns:
+            Multiple stock prices data with normalized format
+            
+        Raises:
+            ExternalAPIError: On API errors or invalid tickers
+        """
+        # Validate all tickers are supported
+        supported_tickers = {"SPY", "XSP", "SPX"}
+        tickers_upper = [ticker.upper() for ticker in tickers]
+        invalid_tickers = [t for t in tickers_upper if t not in supported_tickers]
+        
+        if invalid_tickers:
+            raise ExternalAPIError(
+                message=f"Unsupported tickers: {', '.join(invalid_tickers)}. Supported: {', '.join(supported_tickers)}",
+                service=self.service_name
+            )
+        
+        try:
+            logger.info("Fetching multiple stock prices", tickers=tickers_upper)
+            
+            # Create ticker string for API call
+            tickers_string = ",".join(tickers_upper) + ","
+            
+            # Use existing market snapshot method
+            snapshot_data = await self.get_market_snapshot(tickers=tickers_string)
+            
+            # Extract and normalize ticker data
+            api_tickers = snapshot_data.get("tickers", [])
+            if not api_tickers:
+                raise ExternalAPIError(
+                    message="No price data found for requested tickers",
+                    service=self.service_name
+                )
+            
+            # Process each ticker and create normalized response
+            prices = []
+            found_tickers = set()
+            
+            for ticker_info in api_tickers:
+                if not isinstance(ticker_info, dict):
+                    continue
+                    
+                ticker_symbol = ticker_info.get("ticker", "")
+                if ticker_symbol in tickers_upper:
+                    normalized_data = {
+                        "ticker": ticker_symbol,
+                        "price": float(ticker_info.get("price", 0)),
+                        "change": float(ticker_info.get("change", 0)),
+                        "change_percent": float(ticker_info.get("change_percent", 0)),
+                        "timestamp": datetime.utcnow().isoformat() + "Z"
+                    }
+                    prices.append(normalized_data)
+                    found_tickers.add(ticker_symbol)
+            
+            # Check if any requested tickers were missing
+            missing_tickers = set(tickers_upper) - found_tickers
+            if missing_tickers:
+                logger.warning("Some tickers not found in API response", missing=list(missing_tickers))
+            
+            result = {"prices": prices}
+            
+            logger.info(
+                "Multiple stock prices retrieved successfully",
+                requested_count=len(tickers_upper),
+                found_count=len(prices),
+                tickers=tickers_upper
+            )
+            
+            return result
+            
+        except ExternalAPIError:
+            # Re-raise API errors
+            raise
+        except Exception as e:
+            logger.error("Failed to get multiple stock prices", tickers=tickers, error=str(e))
+            raise ExternalAPIError(
+                message=f"Failed to get prices for tickers {tickers}: {str(e)}",
+                service=self.service_name
+            )
+
     async def health_check(self) -> Dict[str, Any]:
         """Perform health check for TheTradeList API"""
         try:

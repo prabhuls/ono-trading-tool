@@ -99,3 +99,84 @@ class MarketHealthResponse(BaseModel):
         }
 
 
+class StockPriceData(BaseModel):
+    """Individual stock price data"""
+    
+    ticker: str = Field(..., description="Stock ticker symbol")
+    price: float = Field(..., description="Current stock price")
+    change: float = Field(..., description="Price change from previous close")
+    change_percent: float = Field(..., description="Percentage change from previous close")
+    timestamp: str = Field(..., description="Timestamp when price was retrieved (ISO format with Z)")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "ticker": "SPY",
+                "price": 585.18,
+                "change": 2.34,
+                "change_percent": 0.40,
+                "timestamp": "2025-08-28T15:30:00Z"
+            }
+        }
+
+
+class SingleStockPriceResponse(BaseModel):
+    """Response model for single stock price endpoint"""
+    
+    success: bool = Field(..., description="Whether the request was successful")
+    data: StockPriceData = Field(..., description="Stock price data")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "data": {
+                    "ticker": "SPY",
+                    "price": 585.18,
+                    "change": 2.34,
+                    "change_percent": 0.40,
+                    "timestamp": "2025-08-28T15:30:00Z"
+                }
+            }
+        }
+
+
+class MultipleStockPricesResponse(BaseModel):
+    """Response model for multiple stock prices endpoint"""
+    
+    success: bool = Field(..., description="Whether the request was successful")
+    data: Dict[str, List[StockPriceData]] = Field(..., description="Multiple stock prices data")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "data": {
+                    "prices": [
+                        {
+                            "ticker": "SPY",
+                            "price": 585.18,
+                            "change": 2.34,
+                            "change_percent": 0.40,
+                            "timestamp": "2025-08-28T15:30:00Z"
+                        },
+                        {
+                            "ticker": "XSP",
+                            "price": 58.52,
+                            "change": 0.23,
+                            "change_percent": 0.39,
+                            "timestamp": "2025-08-28T15:30:00Z"
+                        },
+                        {
+                            "ticker": "SPX",
+                            "price": 5851.8,
+                            "change": 23.4,
+                            "change_percent": 0.40,
+                            "timestamp": "2025-08-28T15:30:00Z"
+                        }
+                    ]
+                }
+            }
+        }
+
+

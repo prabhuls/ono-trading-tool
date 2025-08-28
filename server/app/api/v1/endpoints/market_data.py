@@ -1,20 +1,49 @@
-from fastapi import APIRouter, Depends
+from typing import List
+from fastapi import APIRouter, Depends, Path, Query, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.core.responses import create_success_response, create_error_response, ErrorCode
 from app.core.logging import get_logger
 from app.core.monitoring import monitor_performance, capture_errors
 from app.core.auth import optional_user
+from app.core.cache import redis_cache
 from app.schemas.market_data import (
     MarketSidebarStatusResponse,
     EnhancedMarketStatusResponse,
-    MarketHealthResponse
+    MarketHealthResponse,
+    SingleStockPriceResponse,
+    MultipleStockPricesResponse
 )
 from app.services.market_status_enhanced_service import get_market_status_enhanced_service
+from app.services.external.thetradelist_service import get_thetradelist_service
+from app.services.external.base import ExternalAPIError
 
 
 logger = get_logger(__name__)
 router = APIRouter()
+
+
+async def get_cached_or_fetch(cache_key: str, fetch_func, ttl: int = 30):
+    """Helper function to implement caching for stock price endpoints"""
+    try:
+        # Try to get cached data
+        cached_data = redis_cache.get(cache_key)
+        if cached_data is not None:
+            logger.info(f"Cache hit: {cache_key}")
+            return cached_data
+        
+        # Fetch fresh data
+        fresh_data = await fetch_func()
+        
+        # Cache the result
+        redis_cache.set(cache_key, fresh_data, ttl)
+        logger.info(f"Cache set: {cache_key} (TTL: {ttl}s)")
+        
+        return fresh_data
+    except Exception as e:
+        logger.error(f"Cache operation failed for {cache_key}: {str(e)}")
+        # Fallback to direct fetch if caching fails
+        return await fetch_func()
 
 
 @router.get(
@@ -186,6 +215,283 @@ async def get_market_health() -> JSONResponse:
         return create_error_response(
             error_code=ErrorCode.INTERNAL_ERROR,
             message="Failed to perform health check",
+            status_code=500,
+            error_details={
+                "error_type": type(e).__name__,
+                "details": str(e)
+            }
+        )
+
+
+@router.get(
+    "/current-price/{ticker}",
+    response_model=SingleStockPriceResponse,
+    summary="Get current price for a single stock ticker",
+    description="Get real-time price data for a single stock ticker (SPY, XSP, SPX)",
+    operation_id="get_current_stock_price"
+)
+@monitor_performance("api.market_data.current_price")
+@capture_errors(level="error")
+async def get_current_price(
+    ticker: str = Path(..., description="Stock ticker symbol (SPY, XSP, SPX)", regex="^(SPY|XSP|SPX)$"),
+    current_user = Depends(optional_user)
+) -> JSONResponse:
+    """
+    Get current price for a single stock ticker
+    
+    Retrieves real-time price data including:
+    - Current price
+    - Price change from previous close
+    - Percentage change
+    - Timestamp of data retrieval
+    
+    Supports the following tickers: SPY, XSP, SPX
+    Data is cached for 30 seconds for optimal performance.
+    
+    Args:
+        ticker: Stock ticker symbol (SPY, XSP, or SPX)
+        
+    Returns:
+        JSONResponse with current stock price data
+        
+    Raises:
+        HTTPException: 400 for invalid ticker, 503 for API unavailable, 500 for server errors
+    """
+    try:
+        logger.info(
+            "Fetching current stock price",
+            ticker=ticker.upper(),
+            user_id=getattr(current_user, 'id', None) if current_user else None
+        )
+        
+        # Get TheTradeList service
+        tradelist_service = get_thetradelist_service()
+        
+        # Use caching for stock price data
+        cache_key = f"stock_price:{ticker.upper()}"
+        price_data = await get_cached_or_fetch(
+            cache_key,
+            lambda: tradelist_service.get_stock_price(ticker),
+            ttl=30
+        )
+        
+        logger.info(
+            "Stock price retrieved successfully",
+            ticker=ticker.upper(),
+            price=price_data["price"],
+            change=price_data["change"]
+        )
+        
+        return create_success_response(
+            data=price_data,
+            message=f"Current price for {ticker.upper()} retrieved successfully"
+        )
+        
+    except ExternalAPIError as e:
+        logger.error("External API error fetching stock price", ticker=ticker, error=str(e))
+        if "not supported" in str(e).lower():
+            return create_error_response(
+                error_code=ErrorCode.VALIDATION_ERROR,
+                message=f"Ticker {ticker} is not supported",
+                status_code=400,
+                error_details={"supported_tickers": ["SPY", "XSP", "SPX"]}
+            )
+        else:
+            return create_error_response(
+                error_code=ErrorCode.EXTERNAL_SERVICE_ERROR,
+                message="Stock price data temporarily unavailable",
+                status_code=503,
+                error_details={"service": "TheTradeList API"}
+            )
+    except Exception as e:
+        logger.error("Failed to fetch stock price", ticker=ticker, error=str(e))
+        return create_error_response(
+            error_code=ErrorCode.INTERNAL_ERROR,
+            message=f"Failed to retrieve price for {ticker}",
+            status_code=500,
+            error_details={
+                "error_type": type(e).__name__,
+                "details": str(e)
+            }
+        )
+
+
+@router.get(
+    "/current-prices",
+    response_model=MultipleStockPricesResponse,
+    summary="Get current prices for multiple stock tickers",
+    description="Get real-time price data for multiple stock tickers (SPY, XSP, SPX)",
+    operation_id="get_current_stock_prices"
+)
+@monitor_performance("api.market_data.current_prices")
+@capture_errors(level="error")
+async def get_current_prices(
+    tickers: List[str] = Query(..., description="Comma-separated list of stock ticker symbols", example=["SPY", "XSP", "SPX"]),
+    current_user = Depends(optional_user)
+) -> JSONResponse:
+    """
+    Get current prices for multiple stock tickers
+    
+    Retrieves real-time price data for multiple tickers including:
+    - Current price for each ticker
+    - Price change from previous close
+    - Percentage change
+    - Timestamp of data retrieval
+    
+    Supports the following tickers: SPY, XSP, SPX
+    Data is cached for 30 seconds for optimal performance.
+    
+    Args:
+        tickers: List of stock ticker symbols (SPY, XSP, SPX)
+        
+    Returns:
+        JSONResponse with current stock prices data
+        
+    Raises:
+        HTTPException: 400 for invalid tickers, 503 for API unavailable, 500 for server errors
+    """
+    try:
+        logger.info(
+            "Fetching multiple stock prices",
+            tickers=tickers,
+            user_id=getattr(current_user, 'id', None) if current_user else None
+        )
+        
+        # Validate input
+        if not tickers:
+            return create_error_response(
+                error_code=ErrorCode.VALIDATION_ERROR,
+                message="At least one ticker must be provided",
+                status_code=400
+            )
+        
+        # Get TheTradeList service
+        tradelist_service = get_thetradelist_service()
+        
+        # Use caching for stock prices data
+        cache_key = f"stock_prices:{'_'.join(sorted([t.upper() for t in tickers]))}"
+        prices_data = await get_cached_or_fetch(
+            cache_key,
+            lambda: tradelist_service.get_multiple_stock_prices(tickers),
+            ttl=30
+        )
+        
+        logger.info(
+            "Multiple stock prices retrieved successfully",
+            tickers=tickers,
+            count=len(prices_data.get("prices", []))
+        )
+        
+        return create_success_response(
+            data=prices_data,
+            message=f"Current prices for {len(tickers)} tickers retrieved successfully"
+        )
+        
+    except ExternalAPIError as e:
+        logger.error("External API error fetching stock prices", tickers=tickers, error=str(e))
+        if "unsupported" in str(e).lower():
+            return create_error_response(
+                error_code=ErrorCode.VALIDATION_ERROR,
+                message="One or more tickers are not supported",
+                status_code=400,
+                error_details={
+                    "supported_tickers": ["SPY", "XSP", "SPX"],
+                    "error": str(e)
+                }
+            )
+        else:
+            return create_error_response(
+                error_code=ErrorCode.EXTERNAL_SERVICE_ERROR,
+                message="Stock price data temporarily unavailable",
+                status_code=503,
+                error_details={"service": "TheTradeList API"}
+            )
+    except Exception as e:
+        logger.error("Failed to fetch stock prices", tickers=tickers, error=str(e))
+        return create_error_response(
+            error_code=ErrorCode.INTERNAL_ERROR,
+            message="Failed to retrieve stock prices",
+            status_code=500,
+            error_details={
+                "error_type": type(e).__name__,
+                "details": str(e)
+            }
+        )
+
+
+@router.get(
+    "/spy-price",
+    response_model=SingleStockPriceResponse,
+    summary="Get current SPY price",
+    description="Get real-time price data specifically for SPY ticker (optimized for trading algorithm)",
+    operation_id="get_spy_price"
+)
+@monitor_performance("api.market_data.spy_price")
+@capture_errors(level="error")
+async def get_spy_price(
+    current_user = Depends(optional_user)
+) -> JSONResponse:
+    """
+    Get current SPY price (dedicated endpoint for the trading algorithm)
+    
+    Optimized endpoint specifically for SPY price retrieval, commonly used
+    by the trading algorithm for quick decision making.
+    
+    Retrieves real-time SPY price data including:
+    - Current SPY price
+    - Price change from previous close
+    - Percentage change
+    - Timestamp of data retrieval
+    
+    Data is cached for 30 seconds for optimal performance.
+    
+    Returns:
+        JSONResponse with current SPY price data
+        
+    Raises:
+        HTTPException: 503 for API unavailable, 500 for server errors
+    """
+    try:
+        logger.info(
+            "Fetching SPY price",
+            user_id=getattr(current_user, 'id', None) if current_user else None
+        )
+        
+        # Get TheTradeList service
+        tradelist_service = get_thetradelist_service()
+        
+        # Use caching for SPY price data
+        cache_key = "stock_price:SPY"
+        price_data = await get_cached_or_fetch(
+            cache_key,
+            lambda: tradelist_service.get_stock_price("SPY"),
+            ttl=30
+        )
+        
+        logger.info(
+            "SPY price retrieved successfully",
+            price=price_data["price"],
+            change=price_data["change"]
+        )
+        
+        return create_success_response(
+            data=price_data,
+            message="SPY price retrieved successfully"
+        )
+        
+    except ExternalAPIError as e:
+        logger.error("External API error fetching SPY price", error=str(e))
+        return create_error_response(
+            error_code=ErrorCode.EXTERNAL_SERVICE_ERROR,
+            message="SPY price data temporarily unavailable",
+            status_code=503,
+            error_details={"service": "TheTradeList API"}
+        )
+    except Exception as e:
+        logger.error("Failed to fetch SPY price", error=str(e))
+        return create_error_response(
+            error_code=ErrorCode.INTERNAL_ERROR,
+            message="Failed to retrieve SPY price",
             status_code=500,
             error_details={
                 "error_type": type(e).__name__,
