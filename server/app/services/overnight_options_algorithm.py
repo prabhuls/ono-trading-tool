@@ -343,6 +343,9 @@ class OvernightOptionsAlgorithm:
                     "max_risk": optimal_spread["max_risk"] if optimal_spread else None,
                     "roi_potential": optimal_spread["roi_potential"] if optimal_spread else None,
                     "profit_target": optimal_spread["profit_target"] if optimal_spread else None,
+                    "target_roi": 20.0,  # Fixed 20% target per project requirements
+                    "strategy": f"BUY {optimal_spread['buy_strike']:.0f} / SELL {optimal_spread['sell_strike']:.0f} CALL" if optimal_spread else None,
+                    "expiration": option_chain_data.get("expiration_date"),
                     "qualified_spreads_count": len(qualifying_spreads)
                 },
                 "message": self._get_result_message(optimal_spread, len(qualifying_spreads))
@@ -396,6 +399,9 @@ class OvernightOptionsAlgorithm:
                 "max_risk": None,
                 "roi_potential": None,
                 "profit_target": None,
+                "target_roi": 20.0,  # Fixed 20% target per project requirements
+                "strategy": None,
+                "expiration": expiration_date,
                 "qualified_spreads_count": 0
             },
             "message": "No option contracts available for analysis"

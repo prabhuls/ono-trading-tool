@@ -91,6 +91,7 @@ export interface AlgorithmResult {
   max_risk?: number | null;
   roi_potential?: number | null;
   profit_target?: number | null;
+  target_roi?: number | null;
   qualified_spreads_count: number;
 }
 

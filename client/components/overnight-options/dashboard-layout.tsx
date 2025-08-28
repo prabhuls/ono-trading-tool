@@ -80,29 +80,16 @@ export function DashboardLayout() {
         setAlgorithmResult(optionChainResponse.algorithm_result || null);
         setCurrentSpyPrice(optionChainResponse.metadata?.current_price || 0);
         
-        // Update dashboard data with algorithm results
-        if (optionChainResponse.algorithm_result) {
-          const algoResult = optionChainResponse.algorithm_result;
-          setDashboardData(prev => ({
-            ...prev,
-            currentSpyPrice: optionChainResponse.metadata?.current_price || prev.currentSpyPrice,
-            optionChain: mappedOptionChain,
-            spreadRecommendation: {
-              ...prev.spreadRecommendation,
-              buyStrike: algoResult.buy_strike || prev.spreadRecommendation.buyStrike,
-              sellStrike: algoResult.sell_strike || prev.spreadRecommendation.sellStrike,
-              spreadCost: algoResult.spread_cost || prev.spreadRecommendation.spreadCost,
-              maxReward: algoResult.max_reward || prev.spreadRecommendation.maxReward,
-              maxRisk: algoResult.max_risk || prev.spreadRecommendation.maxRisk,
-              roiPotential: algoResult.roi_potential || prev.spreadRecommendation.roiPotential,
-              profitTarget: algoResult.profit_target || prev.spreadRecommendation.profitTarget,
-              strategy: algoResult.buy_strike && algoResult.sell_strike 
-                ? `BUY ${algoResult.buy_strike} / SELL ${algoResult.sell_strike} CALL`
-                : prev.spreadRecommendation.strategy,
-              expiration: optionChainResponse.metadata?.expiration_date || prev.spreadRecommendation.expiration
-            }
-          }));
-        }
+        // Update dashboard data with basic chart info only
+        setDashboardData(prev => ({
+          ...prev,
+          currentSpyPrice: optionChainResponse.metadata?.current_price || prev.currentSpyPrice,
+          optionChain: mappedOptionChain,
+          spreadRecommendation: {
+            ...prev.spreadRecommendation,
+            expiration: optionChainResponse.metadata?.expiration_date || prev.spreadRecommendation.expiration
+          }
+        }));
       }
     } catch (error) {
       console.error('Failed to fetch option chain data:', error);
@@ -210,8 +197,11 @@ export function DashboardLayout() {
           {/* Left Sidebar */}
           <div className="lg:col-span-4 space-y-6">
             <TopRankedTrade
-              currentSpyPrice={dashboardData.currentSpyPrice}
-              spreadRecommendation={dashboardData.spreadRecommendation}
+              currentSpyPrice={currentSpyPrice}
+              algorithmResult={algorithmResult}
+              algorithmLoading={optionChainLoading}
+              algorithmError={optionChainError}
+              expiration={optionChainData.length > 0 ? dashboardData.spreadRecommendation.expiration : undefined}
               activeTicker={activeTicker}
               onScanForNewSpreads={handleScanForNewSpreads}
               onAdjustMaxCost={handleAdjustMaxCost}
@@ -223,9 +213,9 @@ export function DashboardLayout() {
           {/* Main Content */}
           <div className="lg:col-span-8 space-y-6">
             <SpyIntradayChart
-              buyStrike={dashboardData.spreadRecommendation.buyStrike}
-              sellStrike={dashboardData.spreadRecommendation.sellStrike}
-              currentPrice={dashboardData.currentSpyPrice}
+              buyStrike={algorithmResult?.buy_strike || dashboardData.spreadRecommendation.buyStrike}
+              sellStrike={algorithmResult?.sell_strike || dashboardData.spreadRecommendation.sellStrike}
+              currentPrice={currentSpyPrice}
               chartIntervals={dashboardData.chartIntervals}
               lastUpdated={dashboardData.lastUpdated}
               onIntervalChange={handleIntervalChange}

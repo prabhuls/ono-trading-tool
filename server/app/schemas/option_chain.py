@@ -115,6 +115,9 @@ class AlgorithmResult(BaseModel):
     max_risk: Optional[float] = Field(None, description="Maximum risk")
     roi_potential: Optional[float] = Field(None, description="ROI potential percentage")
     profit_target: Optional[float] = Field(None, description="20% profit target price")
+    target_roi: float = Field(..., description="Fixed 20% profit target per project requirements")
+    strategy: Optional[str] = Field(None, description="Formatted strategy string (e.g., 'BUY 580 / SELL 581 CALL')")
+    expiration: Optional[str] = Field(None, description="Option expiration date in YYYY-MM-DD format")
     qualified_spreads_count: int = Field(..., description="Number of spreads that qualified")
     
     class Config:
@@ -132,6 +135,9 @@ class AlgorithmResult(BaseModel):
                 "max_risk": 0.73,
                 "roi_potential": 37.0,
                 "profit_target": 0.88,
+                "target_roi": 20.0,
+                "strategy": "BUY 580 / SELL 581 CALL",
+                "expiration": "2025-08-29",
                 "qualified_spreads_count": 3
             }
         }
@@ -178,6 +184,9 @@ class OptionChainWithAlgorithm(BaseModel):
                     "max_risk": 0.73,
                     "roi_potential": 37.0,
                     "profit_target": 0.88,
+                    "target_roi": 20.0,
+                    "strategy": "BUY 580 / SELL 581 CALL",
+                    "expiration": "2025-08-29",
                     "qualified_spreads_count": 3
                 },
                 "message": "Option chain with overnight algorithm applied successfully"

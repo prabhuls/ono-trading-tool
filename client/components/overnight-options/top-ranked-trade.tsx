@@ -1,6 +1,6 @@
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { SpreadRecommendation } from '@/types/overnight-options';
+import { AlgorithmResult } from '@/types/overnight-options';
 import { formatCurrency, formatPercentage } from '@/lib/mock-data/overnight-options';
 import { useStockPrice } from '@/lib/hooks/useStockPrice';
 import { RefreshCw } from 'lucide-react';
@@ -8,7 +8,10 @@ import type { SupportedTicker } from '@/types/stock-price';
 
 interface TopRankedTradeProps {
   currentSpyPrice: number;
-  spreadRecommendation: SpreadRecommendation;
+  algorithmResult: AlgorithmResult | null;
+  algorithmLoading: boolean;
+  algorithmError: string | null;
+  expiration?: string;
   activeTicker?: string;
   onScanForNewSpreads?: () => void;
   onAdjustMaxCost?: () => void;
@@ -17,7 +20,10 @@ interface TopRankedTradeProps {
 
 export function TopRankedTrade({ 
   currentSpyPrice, 
-  spreadRecommendation,
+  algorithmResult,
+  algorithmLoading,
+  algorithmError,
+  expiration,
   activeTicker = 'SPY',
   onScanForNewSpreads,
   onAdjustMaxCost,
@@ -118,79 +124,132 @@ export function TopRankedTrade({
             <div className="text-lg font-semibold text-foreground mb-2">
               Recommended Spread
             </div>
-            <div className="text-blue-400 font-medium">
-              {spreadRecommendation.strategy}
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Expires {spreadRecommendation.expiration}
-            </div>
+            
+            {algorithmLoading ? (
+              <div className="space-y-2">
+                <div className="h-6 bg-gray-800 rounded animate-pulse"></div>
+                <div className="h-4 bg-gray-800 rounded animate-pulse mx-8"></div>
+              </div>
+            ) : algorithmError ? (
+              <div className="text-red-400 text-sm">
+                Error loading spread data
+              </div>
+            ) : !algorithmResult || !algorithmResult.buy_strike || !algorithmResult.sell_strike ? (
+              <div className="text-muted-foreground">
+                <div className="text-yellow-400 font-medium mb-1">
+                  No qualifying spreads found
+                </div>
+                <div className="text-sm">
+                  No spreads found within cost threshold
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="text-blue-400 font-medium">
+                  BUY {algorithmResult.buy_strike} / SELL {algorithmResult.sell_strike} CALL
+                </div>
+                {expiration && (
+                  <div className="text-sm text-muted-foreground mt-1">
+                    Expires {expiration}
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Spread Cost:</span>
-              <span className="text-foreground font-medium">
-                {formatCurrency(spreadRecommendation.spreadCost)}
-              </span>
+          {algorithmLoading ? (
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <div className="h-4 bg-gray-800 rounded animate-pulse w-20"></div>
+                <div className="h-4 bg-gray-800 rounded animate-pulse w-16"></div>
+              </div>
+              <div className="flex justify-between">
+                <div className="h-4 bg-gray-800 rounded animate-pulse w-24"></div>
+                <div className="h-4 bg-gray-800 rounded animate-pulse w-16"></div>
+              </div>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Profit Target:</span>
-              <span className="text-green-400 font-medium">
-                {formatCurrency(spreadRecommendation.profitTarget)}
-              </span>
+          ) : algorithmResult && algorithmResult.buy_strike && algorithmResult.sell_strike ? (
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Spread Cost:</span>
+                <span className="text-foreground font-medium">
+                  {algorithmResult.spread_cost ? formatCurrency(algorithmResult.spread_cost) : 'N/A'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Profit Target:</span>
+                <span className="text-green-400 font-medium">
+                  {algorithmResult.profit_target ? formatCurrency(algorithmResult.profit_target) : 'N/A'}
+                </span>
+              </div>
             </div>
-          </div>
+          ) : null}
 
           {/* Metrics Grid */}
-          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border">
-            <div className="text-center">
-              <div className="text-foreground font-medium">
-                {formatCurrency(spreadRecommendation.maxValue)}
-              </div>
-              <div className="text-xs text-muted-foreground">Max Value</div>
+          {algorithmLoading ? (
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="text-center">
+                  <div className="h-5 bg-gray-800 rounded animate-pulse mb-1"></div>
+                  <div className="h-3 bg-gray-800 rounded animate-pulse mx-2"></div>
+                </div>
+              ))}
             </div>
-            <div className="text-center">
-              <div className="text-green-400 font-medium">
-                {formatCurrency(spreadRecommendation.maxReward)}
+          ) : algorithmResult && algorithmResult.buy_strike && algorithmResult.sell_strike ? (
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border">
+              <div className="text-center">
+                <div className="text-foreground font-medium">
+                  {algorithmResult.spread_cost ? formatCurrency(1.0) : 'N/A'}
+                </div>
+                <div className="text-xs text-muted-foreground">Max Value</div>
               </div>
-              <div className="text-xs text-muted-foreground">Max Reward</div>
-            </div>
-            <div className="text-center">
-              <div className="text-red-400 font-medium">
-                {formatCurrency(spreadRecommendation.maxRisk)}
+              <div className="text-center">
+                <div className="text-green-400 font-medium">
+                  {algorithmResult.max_reward ? formatCurrency(algorithmResult.max_reward) : 'N/A'}
+                </div>
+                <div className="text-xs text-muted-foreground">Max Reward</div>
               </div>
-              <div className="text-xs text-muted-foreground">Max Risk</div>
-            </div>
-            <div className="text-center">
-              <div className="text-green-400 font-medium">
-                {formatPercentage(spreadRecommendation.roiPotential)}
+              <div className="text-center">
+                <div className="text-red-400 font-medium">
+                  {algorithmResult.max_risk ? formatCurrency(algorithmResult.max_risk) : 'N/A'}
+                </div>
+                <div className="text-xs text-muted-foreground">Max Risk</div>
               </div>
-              <div className="text-xs text-muted-foreground">ROI Potential</div>
+              <div className="text-center">
+                <div className="text-green-400 font-medium">
+                  {algorithmResult.roi_potential ? formatPercentage(algorithmResult.roi_potential) : 'N/A'}
+                </div>
+                <div className="text-xs text-muted-foreground">ROI Potential</div>
+              </div>
             </div>
-          </div>
+          ) : null}
 
-          <div className="text-center pt-2 border-t border-border">
-            <div className="text-lg font-semibold text-blue-400">
-              Target ROI: {formatPercentage(spreadRecommendation.targetRoi)}
+          {algorithmResult && algorithmResult.buy_strike && algorithmResult.sell_strike && (
+            <div className="text-center pt-2 border-t border-border">
+              <div className="text-lg font-semibold text-blue-400">
+                Target ROI: {algorithmResult.target_roi ? formatPercentage(algorithmResult.target_roi) : 
+                            algorithmResult.roi_potential ? formatPercentage(algorithmResult.roi_potential) : 'N/A'}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </Card>
 
       {/* Action Buttons */}
       <div className="space-y-2">
         <Button 
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-600 disabled:cursor-not-allowed"
           onClick={onScanForNewSpreads}
+          disabled={algorithmLoading}
         >
-          Scan for New Spreads
+          {algorithmLoading ? 'Scanning...' : 'Scan for New Spreads'}
         </Button>
         <Button 
           variant="outline" 
           className="w-full border-border text-muted-foreground hover:text-foreground hover:border-border/80"
           onClick={onAdjustMaxCost}
         >
-          Adjust Max Cost ({formatCurrency(spreadRecommendation.spreadCost + 0.01)})
+          Adjust Max Cost ({algorithmResult?.spread_cost ? formatCurrency(algorithmResult.spread_cost + 0.01) : '$1.00'})
         </Button>
       </div>
     </div>
