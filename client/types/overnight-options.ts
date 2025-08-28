@@ -15,6 +15,8 @@ export interface SpreadRecommendation {
 export interface MarketStatus {
   isOpen: boolean;
   nextExpiration: string;
+  volume?: string;
+  ivRank?: number;
 }
 
 export interface ApiMarketSidebarStatusResponse {
@@ -63,4 +65,57 @@ export interface ApiMarketStatusResponse {
   session_start_utc: string;
   session_end_utc: string;
   next_active_session: string | null;
+}
+
+// Option Chain API Response Types (matching backend schemas)
+export interface OptionChainMetadata {
+  ticker: string;
+  expiration_date: string;
+  current_price: number;
+  total_contracts: number;
+  algorithm_applied: boolean;
+  max_cost_threshold: number;
+  timestamp: string;
+}
+
+export interface AlgorithmResult {
+  selected_spread?: {
+    buy_strike: number;
+    sell_strike: number;
+    cost: number;
+  } | null;
+  buy_strike?: number | null;
+  sell_strike?: number | null;
+  spread_cost?: number | null;
+  max_reward?: number | null;
+  max_risk?: number | null;
+  roi_potential?: number | null;
+  profit_target?: number | null;
+  qualified_spreads_count: number;
+}
+
+export interface OptionChainResponse {
+  success: boolean;
+  data: OptionChainData[];
+  metadata: OptionChainMetadata;
+  message: string;
+}
+
+export interface OptionChainWithAlgorithm {
+  success: boolean;
+  data: OptionChainData[];
+  metadata: OptionChainMetadata;
+  algorithm_result: AlgorithmResult;
+  message: string;
+}
+
+export interface AlgorithmHealthResponse {
+  success: boolean;
+  data: {
+    is_healthy: boolean;
+    version: string;
+    last_run: string | null;
+    status: string;
+  };
+  message: string;
 }

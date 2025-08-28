@@ -997,6 +997,350 @@ class TheTradeListService(ExternalAPIService):
                 service=self.service_name
             )
 
+    async def get_options_contracts(
+        self,
+        underlying_ticker: str,
+        expiration_date: Optional[str] = None,
+        limit: int = 1000
+    ) -> Dict[str, Any]:
+        """
+        Get options contracts for a specific underlying ticker
+        
+        Args:
+            underlying_ticker: The stock symbol (e.g., "SPY")
+            expiration_date: Optional specific expiration date filter (YYYY-MM-DD)
+            limit: Maximum number of results (default: 1000)
+            
+        Returns:
+            Dictionary containing options contracts data
+            
+        Raises:
+            ExternalAPIError: On API errors
+        """
+        endpoint = "/v1/data/options-contracts"
+        params = {
+            "underlying_ticker": underlying_ticker.upper(),
+            "limit": limit
+        }
+        
+        try:
+            logger.info(
+                "Fetching options contracts",
+                underlying_ticker=underlying_ticker.upper(),
+                expiration_date=expiration_date,
+                limit=limit
+            )
+            
+            raw_data = await self.get(endpoint, params=params, use_cache=True, cache_ttl=300)  # Cache for 5 minutes
+            
+            # Filter by expiration date if provided
+            if expiration_date and "results" in raw_data:
+                filtered_results = [
+                    contract for contract in raw_data.get("results", [])
+                    if contract.get("expiration_date") == expiration_date
+                ]
+                raw_data["results"] = filtered_results
+                raw_data["resultsCount"] = len(filtered_results)
+            
+            logger.info(
+                "Options contracts retrieved successfully",
+                underlying_ticker=underlying_ticker.upper(),
+                total_contracts=len(raw_data.get("results", [])),
+                expiration_filter=expiration_date
+            )
+            
+            return raw_data
+            
+        except ExternalAPIError:
+            raise
+        except Exception as e:
+            logger.error(
+                "Failed to get options contracts",
+                underlying_ticker=underlying_ticker,
+                error=str(e)
+            )
+            raise ExternalAPIError(
+                message=f"Failed to get options contracts for {underlying_ticker}: {str(e)}",
+                service=self.service_name
+            )
+
+    async def get_options_snapshot(
+        self,
+        ticker: str,
+        option_contract: str
+    ) -> Dict[str, Any]:
+        """
+        Get real-time option pricing snapshot
+        
+        Args:
+            ticker: Underlying stock ticker (e.g., "SPY")
+            option_contract: Full option contract symbol (e.g., "O:SPY250829C00580000")
+            
+        Returns:
+            Option pricing data with bid/ask, volume, etc.
+            
+        Raises:
+            ExternalAPIError: On API errors
+        """
+        endpoint = "/v1/data/snapshot-options"
+        params = {
+            "ticker": ticker.upper(),
+            "option": option_contract
+        }
+        
+        try:
+            logger.info(
+                "Fetching option snapshot",
+                ticker=ticker.upper(),
+                option_contract=option_contract
+            )
+            
+            raw_data = await self.get(endpoint, params=params, use_cache=True, cache_ttl=30)  # Cache for 30 seconds
+            
+            logger.info(
+                "Option snapshot retrieved successfully",
+                ticker=ticker.upper(),
+                option_contract=option_contract
+            )
+            
+            return raw_data
+            
+        except ExternalAPIError:
+            raise
+        except Exception as e:
+            logger.error(
+                "Failed to get option snapshot",
+                ticker=ticker,
+                option_contract=option_contract,
+                error=str(e)
+            )
+            raise ExternalAPIError(
+                message=f"Failed to get option snapshot for {option_contract}: {str(e)}",
+                service=self.service_name
+            )
+
+    async def get_last_quote(self, ticker: str) -> Dict[str, Any]:
+        """
+        Get last quote for a stock or option ticker
+        
+        Args:
+            ticker: Ticker symbol (stock or option contract)
+            
+        Returns:
+            Last quote data with bid/ask prices and sizes
+            
+        Raises:
+            ExternalAPIError: On API errors
+        """
+        endpoint = "/v1/data/last-quote"
+        params = {"ticker": ticker}
+        
+        try:
+            logger.info("Fetching last quote", ticker=ticker)
+            
+            raw_data = await self.get(endpoint, params=params, use_cache=True, cache_ttl=30)  # Cache for 30 seconds
+            
+            logger.info("Last quote retrieved successfully", ticker=ticker)
+            
+            return raw_data
+            
+        except ExternalAPIError:
+            raise
+        except Exception as e:
+            logger.error("Failed to get last quote", ticker=ticker, error=str(e))
+            raise ExternalAPIError(
+                message=f"Failed to get last quote for {ticker}: {str(e)}",
+                service=self.service_name
+            )
+
+    async def get_next_trading_day_expiration(self) -> str:
+        """
+        Calculate the next trading day's expiration date
+        
+        Returns:
+            Next trading day date in YYYY-MM-DD format
+        """
+        try:
+            today = datetime.now()
+            next_day = today + timedelta(days=1)
+            
+            # Skip weekends
+            while next_day.weekday() > 4:  # 5=Saturday, 6=Sunday
+                next_day = next_day + timedelta(days=1)
+            
+            # TODO: Could add holiday checking logic here
+            # For now, we'll assume next weekday is a trading day
+            
+            return next_day.strftime("%Y-%m-%d")
+            
+        except Exception as e:
+            logger.error("Failed to calculate next trading day", error=str(e))
+            # Fallback to tomorrow
+            tomorrow = datetime.now() + timedelta(days=1)
+            return tomorrow.strftime("%Y-%m-%d")
+
+    async def build_option_chain_with_pricing(
+        self,
+        ticker: str = "SPY",
+        expiration_date: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Build a complete option chain with live pricing data
+        
+        Args:
+            ticker: Stock ticker symbol (default: "SPY")
+            expiration_date: Option expiration date (default: next trading day)
+            
+        Returns:
+            Complete option chain with contracts and pricing
+            
+        Raises:
+            ExternalAPIError: On API errors
+        """
+        if not expiration_date:
+            expiration_date = await self.get_next_trading_day_expiration()
+        
+        try:
+            logger.info(
+                "Building option chain with pricing",
+                ticker=ticker,
+                expiration_date=expiration_date
+            )
+            
+            # Get options contracts
+            contracts_data = await self.get_options_contracts(
+                underlying_ticker=ticker,
+                expiration_date=expiration_date
+            )
+            
+            contracts = contracts_data.get("results", [])
+            if not contracts:
+                logger.warning(
+                    "No options contracts found",
+                    ticker=ticker,
+                    expiration_date=expiration_date
+                )
+                return {
+                    "ticker": ticker,
+                    "expiration_date": expiration_date,
+                    "contracts": [],
+                    "total_contracts": 0,
+                    "timestamp": datetime.utcnow().isoformat() + "Z"
+                }
+            
+            # Filter for call options only (as per overnight algorithm requirements)
+            call_contracts = [
+                contract for contract in contracts
+                if contract.get("contract_type") == "call"
+            ]
+            
+            logger.info(
+                "Found call contracts",
+                ticker=ticker,
+                total_contracts=len(contracts),
+                call_contracts=len(call_contracts)
+            )
+            
+            # OPTIMIZATION: Limit API calls by only fetching pricing for near-the-money contracts
+            # Get current SPY price first (single API call)
+            try:
+                spy_price_data = await self.get_stock_price("SPY")
+                current_spy_price = spy_price_data.get("price", 585.0)
+            except:
+                current_spy_price = 585.0  # Fallback price
+            
+            # Filter to only near-the-money contracts (within $15 of current price)
+            # This is where the algorithm will find optimal spreads anyway
+            nearby_contracts = [
+                contract for contract in call_contracts
+                if abs(float(contract.get("strike_price", 0)) - current_spy_price) <= 15
+            ]
+            
+            logger.info(
+                "Optimized contract selection",
+                total_contracts=len(call_contracts),
+                nearby_contracts=len(nearby_contracts),
+                current_price=current_spy_price
+            )
+            
+            # Enhance contracts with pricing data (limited set)
+            enhanced_contracts = []
+            
+            # Only fetch pricing for nearby contracts (max 30 to prevent excessive API calls)
+            contracts_to_price = nearby_contracts[:30]
+            
+            for contract in contracts_to_price:
+                try:
+                    option_ticker = contract.get("ticker")
+                    if not option_ticker:
+                        continue
+                    
+                    # Get pricing snapshot for this contract
+                    pricing_data = await self.get_options_snapshot(ticker, option_ticker)
+                    
+                    # Extract relevant pricing information
+                    results = pricing_data.get("results", {})
+                    last_quote = results.get("last_quote", {})
+                    day_data = results.get("day", {})
+                    details = results.get("details", {})
+                    
+                    enhanced_contract = {
+                        "strike": float(details.get("strike_price", contract.get("strike_price", 0))),
+                        "bid": float(last_quote.get("bid", 0)),
+                        "ask": float(last_quote.get("ask", 0)),
+                        "volume": int(day_data.get("volume", 0)),
+                        "open_interest": int(results.get("open_interest", 0)),
+                        "implied_volatility": 0.0,  # TradeList doesn't provide IV in basic snapshot
+                        "contract_ticker": option_ticker,
+                        "expiration_date": contract.get("expiration_date"),
+                        "last_updated": datetime.utcnow().isoformat() + "Z",
+                        "is_highlighted": None
+                    }
+                    
+                    enhanced_contracts.append(enhanced_contract)
+                    
+                except Exception as contract_error:
+                    logger.warning(
+                        "Failed to enhance contract with pricing",
+                        contract_ticker=contract.get("ticker"),
+                        error=str(contract_error)
+                    )
+                    continue
+            
+            # Sort by strike price
+            enhanced_contracts.sort(key=lambda x: x["strike"])
+            
+            result = {
+                "ticker": ticker,
+                "expiration_date": expiration_date,
+                "contracts": enhanced_contracts,
+                "total_contracts": len(enhanced_contracts),
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
+            
+            logger.info(
+                "Option chain built successfully",
+                ticker=ticker,
+                expiration_date=expiration_date,
+                enhanced_contracts=len(enhanced_contracts)
+            )
+            
+            return result
+            
+        except ExternalAPIError:
+            raise
+        except Exception as e:
+            logger.error(
+                "Failed to build option chain",
+                ticker=ticker,
+                expiration_date=expiration_date,
+                error=str(e)
+            )
+            raise ExternalAPIError(
+                message=f"Failed to build option chain for {ticker}: {str(e)}",
+                service=self.service_name
+            )
+
     async def health_check(self) -> Dict[str, Any]:
         """Perform health check for TheTradeList API"""
         try:

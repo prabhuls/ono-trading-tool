@@ -295,5 +295,32 @@ export const api = {
     spyPrice: () => ApiClient.get("/api/v1/market-data/spy-price"),
   },
   
+  // Option Chain endpoints
+  optionChain: {
+    getWithAlgorithm: (ticker: string, params?: {
+      max_cost?: number;
+      expiration_date?: string;
+    }) => {
+      const queryParams = new URLSearchParams();
+      if (params?.max_cost) queryParams.append('max_cost', params.max_cost.toString());
+      if (params?.expiration_date) queryParams.append('expiration_date', params.expiration_date);
+      
+      const queryString = queryParams.toString();
+      return ApiClient.get(`/api/v1/option-chain/${ticker}${queryString ? `?${queryString}` : ''}`);
+    },
+    
+    getRaw: (ticker: string, params?: {
+      expiration_date?: string;
+    }) => {
+      const queryParams = new URLSearchParams();
+      if (params?.expiration_date) queryParams.append('expiration_date', params.expiration_date);
+      
+      const queryString = queryParams.toString();
+      return ApiClient.get(`/api/v1/option-chain/${ticker}/raw${queryString ? `?${queryString}` : ''}`);
+    },
+    
+    getAlgorithmHealth: () => ApiClient.get("/api/v1/option-chain/algorithm/health"),
+  },
+  
   // Add more API endpoints here
 };

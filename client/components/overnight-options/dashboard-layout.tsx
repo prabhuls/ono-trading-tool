@@ -9,14 +9,26 @@ import { OptionChainOptimizer } from './option-chain-optimizer';
 import { StatusBars } from './status-bars';
 import { mockDashboardData, mockStatusBars } from '@/lib/mock-data/overnight-options';
 import { api } from '@/lib/api';
-import type { ApiMarketStatusResponse } from '@/types/overnight-options';
+import type { 
+  ApiMarketStatusResponse, 
+  OptionChainWithAlgorithm, 
+  OptionChainData,
+  AlgorithmResult 
+} from '@/types/overnight-options';
 
 export function DashboardLayout() {
   const [dashboardData, setDashboardData] = useState(mockDashboardData);
   const [activeTicker, setActiveTicker] = useState('SPY');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false); // Don't block initial render
   const [error, setError] = useState<string | null>(null);
   const [marketStatusError, setMarketStatusError] = useState<string | null>(null);
+  
+  // Option chain specific state
+  const [optionChainData, setOptionChainData] = useState<OptionChainData[]>([]);
+  const [algorithmResult, setAlgorithmResult] = useState<AlgorithmResult | null>(null);
+  const [optionChainLoading, setOptionChainLoading] = useState(true); // Show loading for option chain initially
+  const [optionChainError, setOptionChainError] = useState<string | null>(null);
+  const [currentSpyPrice, setCurrentSpyPrice] = useState<number>(585.27);
 
   // Fetch market status from API
   const fetchMarketStatus = async (): Promise<void> => {
@@ -40,21 +52,78 @@ export function DashboardLayout() {
     }
   };
 
+  // Fetch option chain data with algorithm
+  const fetchOptionChainData = async (): Promise<void> => {
+    try {
+      setOptionChainLoading(true);
+      setOptionChainError(null);
+      
+      const response = await api.optionChain.getWithAlgorithm(activeTicker);
+      
+      if (response.success && response.data) {
+        const optionChainResponse = response.data as any;
+        
+        // Map snake_case API response to camelCase frontend format
+        const optionChainArray = optionChainResponse.data || [];
+        const mappedOptionChain: OptionChainData[] = optionChainArray.map((item: any) => ({
+          strike: item.strike,
+          bid: item.bid,
+          ask: item.ask,
+          volume: item.volume,
+          openInterest: item.open_interest || item.openInterest || 0,
+          impliedVolatility: item.implied_volatility || item.impliedVolatility || 0,
+          isHighlighted: item.is_highlighted || item.isHighlighted || null
+        }));
+        
+        // Update option chain data
+        setOptionChainData(mappedOptionChain);
+        setAlgorithmResult(optionChainResponse.algorithm_result || null);
+        setCurrentSpyPrice(optionChainResponse.metadata?.current_price || 0);
+        
+        // Update dashboard data with algorithm results
+        if (optionChainResponse.algorithm_result) {
+          const algoResult = optionChainResponse.algorithm_result;
+          setDashboardData(prev => ({
+            ...prev,
+            currentSpyPrice: optionChainResponse.metadata?.current_price || prev.currentSpyPrice,
+            optionChain: mappedOptionChain,
+            spreadRecommendation: {
+              ...prev.spreadRecommendation,
+              buyStrike: algoResult.buy_strike || prev.spreadRecommendation.buyStrike,
+              sellStrike: algoResult.sell_strike || prev.spreadRecommendation.sellStrike,
+              spreadCost: algoResult.spread_cost || prev.spreadRecommendation.spreadCost,
+              maxReward: algoResult.max_reward || prev.spreadRecommendation.maxReward,
+              maxRisk: algoResult.max_risk || prev.spreadRecommendation.maxRisk,
+              roiPotential: algoResult.roi_potential || prev.spreadRecommendation.roiPotential,
+              profitTarget: algoResult.profit_target || prev.spreadRecommendation.profitTarget,
+              strategy: algoResult.buy_strike && algoResult.sell_strike 
+                ? `BUY ${algoResult.buy_strike} / SELL ${algoResult.sell_strike} CALL`
+                : prev.spreadRecommendation.strategy,
+              expiration: optionChainResponse.metadata?.expiration_date || prev.spreadRecommendation.expiration
+            }
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch option chain data:', error);
+      setOptionChainError('Unable to fetch option chain data');
+    } finally {
+      setOptionChainLoading(false);
+    }
+  };
+
   useEffect(() => {
     const loadData = async () => {
+      // Don't block initial render - show layout immediately
+      setIsLoading(false);
+      
+      // Load data in the background
       try {
-        setIsLoading(true);
-        
-        // Load initial dashboard data (keep mock data for other components)
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Fetch real market status
-        await fetchMarketStatus();
-        
-        setIsLoading(false);
+        // Fetch data without blocking
+        fetchMarketStatus();
+        fetchOptionChainData();
       } catch (err) {
-        setError('Failed to load dashboard data');
-        setIsLoading(false);
+        console.error('Failed to load dashboard data:', err);
       }
     };
     
@@ -66,23 +135,26 @@ export function DashboardLayout() {
     }, 30000); // Poll every 30 seconds
 
     return () => clearInterval(interval);
-  }, []);
+  }, [activeTicker]); // Refetch when ticker changes
 
-  const handleRefresh = (): void => {
+  const handleRefresh = async (): Promise<void> => {
     try {
-      // Fetch fresh market status data
-      fetchMarketStatus();
+      // Fetch fresh market status and option chain data
+      await Promise.all([
+        fetchMarketStatus(),
+        fetchOptionChainData()
+      ]);
     } catch (error) {
-      // Silent fail for now (no monitoring setup)
+      console.error('Failed to refresh data:', error);
     }
   };
 
-  const handleScanForNewSpreads = (): void => {
+  const handleScanForNewSpreads = async (): Promise<void> => {
     try {
-      // In a real app, this would trigger spread scanning
-      // For now, just prevent any errors
+      // Refresh option chain data to scan for new spreads
+      await fetchOptionChainData();
     } catch (error) {
-      // Silent fail for now (no monitoring setup)
+      console.error('Failed to scan for new spreads:', error);
     }
   };
 
@@ -119,21 +191,8 @@ export function DashboardLayout() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen dashboard-bg flex items-center justify-center">
-        <div className="text-white">Loading...</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen dashboard-bg flex items-center justify-center">
-        <div className="text-red-400">Error: {error}</div>
-      </div>
-    );
-  }
+  // Don't block render - show layout immediately
+  // Individual components will handle their own loading states
 
   return (
     <div className="min-h-screen dashboard-bg">
@@ -172,8 +231,11 @@ export function DashboardLayout() {
               onIntervalChange={handleIntervalChange}
             />
             <OptionChainOptimizer
-              optionChain={dashboardData.optionChain}
+              optionChain={optionChainData.length > 0 ? optionChainData : dashboardData.optionChain}
               expiration={dashboardData.spreadRecommendation.expiration}
+              isLoading={optionChainLoading}
+              error={optionChainError}
+              algorithmResult={algorithmResult}
             />
           </div>
         </div>
