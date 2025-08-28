@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
@@ -1155,7 +1156,81 @@ class TheTradeListService(ExternalAPIService):
 
     async def get_next_trading_day_expiration(self) -> str:
         """
-        Calculate the next trading day's expiration date
+        Get the next available trading day expiration from API data
+        
+        Instead of calculating theoretical dates, queries the API for actual
+        available expiration dates and returns the next one.
+        
+        Returns:
+            Next available trading day expiration date in YYYY-MM-DD format
+        """
+        try:
+            logger.info("Getting next available expiration from API")
+            
+            # Get all available SPY option contracts to find expiration dates
+            contracts_data = await self.get_options_contracts(
+                underlying_ticker="SPY",
+                limit=1000
+            )
+            
+            results = contracts_data.get("results", [])
+            if not results:
+                logger.warning("No option contracts found for expiration date lookup")
+                # Fallback to calculated date
+                return self._calculate_next_trading_day()
+            
+            # Extract unique expiration dates
+            expiration_dates = set()
+            for contract in results:
+                exp_date = contract.get("expiration_date")
+                if exp_date:
+                    expiration_dates.add(exp_date)
+            
+            if not expiration_dates:
+                logger.warning("No expiration dates found in contracts")
+                return self._calculate_next_trading_day()
+            
+            # Sort expiration dates and find next available
+            sorted_expirations = sorted(list(expiration_dates))
+            
+            # Use ET timezone for comparison since market data is in ET
+            try:
+                import pytz
+                et_tz = pytz.timezone('America/New_York')
+                today_et = datetime.now(et_tz).strftime('%Y-%m-%d')
+                today = today_et
+                logger.info(f"Using ET timezone for date comparison: {today_et}")
+            except ImportError:
+                # Fallback if pytz not available
+                today = datetime.now().strftime('%Y-%m-%d')
+                logger.warning("pytz not available, using local time for comparison")
+            
+            # Find first expiration date after today
+            next_available = None
+            for exp_date in sorted_expirations:
+                if exp_date > today:
+                    next_available = exp_date
+                    break
+            
+            if next_available:
+                logger.info(
+                    "Next available expiration found via API",
+                    expiration_date=next_available,
+                    total_available=len(sorted_expirations)
+                )
+                return next_available
+            else:
+                logger.warning("No future expiration dates found in API data")
+                return self._calculate_next_trading_day()
+                
+        except Exception as e:
+            logger.error("Failed to get next expiration from API", error=str(e))
+            # Fallback to calculated date
+            return self._calculate_next_trading_day()
+    
+    def _calculate_next_trading_day(self) -> str:
+        """
+        Fallback method to calculate next trading day when API lookup fails
         
         Returns:
             Next trading day date in YYYY-MM-DD format
@@ -1168,14 +1243,11 @@ class TheTradeListService(ExternalAPIService):
             while next_day.weekday() > 4:  # 5=Saturday, 6=Sunday
                 next_day = next_day + timedelta(days=1)
             
-            # TODO: Could add holiday checking logic here
-            # For now, we'll assume next weekday is a trading day
-            
             return next_day.strftime("%Y-%m-%d")
             
         except Exception as e:
-            logger.error("Failed to calculate next trading day", error=str(e))
-            # Fallback to tomorrow
+            logger.error("Failed to calculate fallback trading day", error=str(e))
+            # Ultimate fallback to tomorrow
             tomorrow = datetime.now() + timedelta(days=1)
             return tomorrow.strftime("%Y-%m-%d")
 
@@ -1263,20 +1335,42 @@ class TheTradeListService(ExternalAPIService):
                 current_price=current_spy_price
             )
             
-            # Enhance contracts with pricing data (limited set)
+            # Enhance contracts with pricing data (limited set with error handling)
             enhanced_contracts = []
             
-            # Only fetch pricing for nearby contracts (max 30 to prevent excessive API calls)
-            contracts_to_price = nearby_contracts[:30]
+            # Only fetch pricing for nearby contracts (max 20 to prevent excessive API calls)
+            contracts_to_price = nearby_contracts[:20]
             
-            for contract in contracts_to_price:
+            # Track API call success/failure for circuit breaker
+            pricing_failures = 0
+            max_failures = 5  # Stop fetching if too many failures
+            
+            for i, contract in enumerate(contracts_to_price):
                 try:
+                    # Circuit breaker: stop if too many failures
+                    if pricing_failures >= max_failures:
+                        logger.warning(
+                            "Too many pricing API failures, stopping option chain enhancement",
+                            failures=pricing_failures,
+                            contracts_processed=i
+                        )
+                        break
+                    
                     option_ticker = contract.get("ticker")
                     if not option_ticker:
+                        logger.debug("Skipping contract with missing ticker")
                         continue
                     
-                    # Get pricing snapshot for this contract
+                    # Get pricing snapshot for this contract with timeout protection
                     pricing_data = await self.get_options_snapshot(ticker, option_ticker)
+                    
+                    if not pricing_data or not pricing_data.get("results"):
+                        pricing_failures += 1
+                        logger.debug(
+                            "Empty pricing data for contract",
+                            option_ticker=option_ticker
+                        )
+                        continue
                     
                     # Extract relevant pricing information
                     results = pricing_data.get("results", {})
@@ -1284,10 +1378,22 @@ class TheTradeListService(ExternalAPIService):
                     day_data = results.get("day", {})
                     details = results.get("details", {})
                     
+                    # Validate that we have usable pricing data
+                    bid = float(last_quote.get("bid", 0))
+                    ask = float(last_quote.get("ask", 0))
+                    
+                    if bid == 0 and ask == 0:
+                        logger.debug(
+                            "No pricing data available for contract",
+                            option_ticker=option_ticker
+                        )
+                        pricing_failures += 1
+                        continue
+                    
                     enhanced_contract = {
                         "strike": float(details.get("strike_price", contract.get("strike_price", 0))),
-                        "bid": float(last_quote.get("bid", 0)),
-                        "ask": float(last_quote.get("ask", 0)),
+                        "bid": bid,
+                        "ask": ask,
                         "volume": int(day_data.get("volume", 0)),
                         "open_interest": int(results.get("open_interest", 0)),
                         "implied_volatility": 0.0,  # TradeList doesn't provide IV in basic snapshot
@@ -1299,13 +1405,36 @@ class TheTradeListService(ExternalAPIService):
                     
                     enhanced_contracts.append(enhanced_contract)
                     
+                    # Small delay between API calls to avoid overwhelming the API
+                    if i < len(contracts_to_price) - 1:  # Don't delay after last contract
+                        await asyncio.sleep(0.1)  # 100ms delay
+                    
                 except Exception as contract_error:
+                    pricing_failures += 1
                     logger.warning(
                         "Failed to enhance contract with pricing",
                         contract_ticker=contract.get("ticker"),
-                        error=str(contract_error)
+                        error=str(contract_error),
+                        failures=pricing_failures
                     )
+                    
+                    # If we're getting too many errors, stop processing
+                    if pricing_failures >= max_failures:
+                        logger.error(
+                            "Stopping option pricing due to excessive failures",
+                            failures=pricing_failures,
+                            contracts_processed=i
+                        )
+                        break
+                    
                     continue
+            
+            logger.info(
+                "Option pricing enhancement completed",
+                contracts_enhanced=len(enhanced_contracts),
+                pricing_failures=pricing_failures,
+                total_attempted=min(len(contracts_to_price), i + 1) if 'i' in locals() else 0
+            )
             
             # Sort by strike price
             enhanced_contracts.sort(key=lambda x: x["strike"])
@@ -1528,12 +1657,9 @@ class TheTradeListService(ExternalAPIService):
             # Sort by timestamp to ensure chronological order
             price_data.sort(key=lambda x: x["timestamp"])
             
-            # Get current price from live data if available
-            try:
-                live_price_data = self.get_stock_price(ticker)  # This is async but we need sync here
-                # We'll use the last close price from the data instead
-            except:
-                pass
+            # Note: We use the last close price from historical data instead of making 
+            # an async call to get_stock_price here since this is a sync method.
+            # Current price will be fetched separately by the calling code if needed.
             
             # If no current price from data, use fallback
             if current_price == 0.0:
