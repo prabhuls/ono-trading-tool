@@ -82,14 +82,28 @@ export function SpyIntradayChart({
     const chartWidth = rect.width - padding.left - padding.right;
     const chartHeight = rect.height - padding.top - padding.bottom;
 
-    // Get price range
+    // Get price range including benchmark lines
     const prices = priceData.map(d => d.close);
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
+    let minPrice = Math.min(...prices);
+    let maxPrice = Math.max(...prices);
+    
+    // Include benchmark lines in range calculation if they exist
+    const benchmarkPrices = [
+      chartData.benchmark_lines.current_price,
+      chartData.benchmark_lines.buy_strike,
+      chartData.benchmark_lines.sell_strike
+    ].filter(price => price !== null && price !== undefined && price > 0) as number[];
+    
+    if (benchmarkPrices.length > 0) {
+      minPrice = Math.min(minPrice, ...benchmarkPrices);
+      maxPrice = Math.max(maxPrice, ...benchmarkPrices);
+    }
+    
     const priceRange = maxPrice - minPrice;
     const paddedMin = minPrice - (priceRange * 0.1);
     const paddedMax = maxPrice + (priceRange * 0.1);
     const paddedRange = paddedMax - paddedMin;
+    
 
     // Draw grid lines (horizontal)
     ctx.strokeStyle = '#374151';
@@ -121,7 +135,9 @@ export function SpyIntradayChart({
 
     // Draw benchmark lines
     const drawBenchmarkLine = (price: number, color: string, label: string, isDashed = false) => {
-      if (price < paddedMin || price > paddedMax) return;
+      if (price < paddedMin || price > paddedMax) {
+        return;
+      }
 
       const y = padding.top + chartHeight - ((price - paddedMin) / paddedRange) * chartHeight;
 
@@ -147,9 +163,11 @@ export function SpyIntradayChart({
 
     // Draw benchmark lines
     drawBenchmarkLine(chartData.benchmark_lines.current_price, '#60A5FA', 'Current');
+    
     if (chartData.benchmark_lines.buy_strike && chartData.benchmark_lines.buy_strike > 0) {
       drawBenchmarkLine(chartData.benchmark_lines.buy_strike, '#F97316', 'Buy', true);
     }
+    
     if (chartData.benchmark_lines.sell_strike && chartData.benchmark_lines.sell_strike > 0) {
       drawBenchmarkLine(chartData.benchmark_lines.sell_strike, '#EF4444', 'Sell', true);
     }
