@@ -78,7 +78,7 @@ export function SpyIntradayChart({
     if (priceData.length === 0) return;
 
     // Chart dimensions
-    const padding = { top: 20, right: 60, bottom: 40, left: 10 };
+    const padding = { top: 20, right: 60, bottom: 60, left: 60 };
     const chartWidth = rect.width - padding.left - padding.right;
     const chartHeight = rect.height - padding.top - padding.bottom;
 
@@ -105,14 +105,35 @@ export function SpyIntradayChart({
     const paddedRange = paddedMax - paddedMin;
     
 
-    // Draw grid lines (horizontal)
+    // Draw grid lines (horizontal) and y-axis labels
     ctx.strokeStyle = '#374151';
     ctx.lineWidth = 0.5;
+    ctx.fillStyle = '#9CA3AF';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    
     for (let i = 0; i <= 4; i++) {
       const y = padding.top + (chartHeight / 4) * i;
+      const priceValue = paddedMax - (paddedRange / 4) * i;
+      
+      // Draw grid line
       ctx.beginPath();
       ctx.moveTo(padding.left, y);
       ctx.lineTo(padding.left + chartWidth, y);
+      ctx.stroke();
+      
+      // Draw y-axis price label
+      ctx.fillText(priceValue.toFixed(2), padding.left - 8, y);
+    }
+    
+    // Draw vertical grid lines
+    const numVerticalLines = 6;
+    for (let i = 0; i < numVerticalLines; i++) {
+      const x = padding.left + (chartWidth / (numVerticalLines - 1)) * i;
+      ctx.beginPath();
+      ctx.moveTo(x, padding.top);
+      ctx.lineTo(x, padding.top + chartHeight);
       ctx.stroke();
     }
 
@@ -158,7 +179,8 @@ export function SpyIntradayChart({
       ctx.fillStyle = color;
       ctx.font = '12px sans-serif';
       ctx.textAlign = 'left';
-      ctx.fillText(`${label} (${price.toFixed(2)})`, padding.left + chartWidth + 5, y + 4);
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${label} (${price.toFixed(2)})`, padding.left + chartWidth + 5, y);
     };
 
     // Draw benchmark lines
@@ -174,6 +196,30 @@ export function SpyIntradayChart({
 
     // Reset line dash
     ctx.setLineDash([]);
+    
+    // Draw x-axis time labels
+    ctx.fillStyle = '#9CA3AF';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    
+    const numLabels = 6; // Show 6 time labels across the chart
+    for (let i = 0; i < numLabels; i++) {
+      const dataIndex = Math.floor((priceData.length - 1) * (i / (numLabels - 1)));
+      const x = padding.left + (dataIndex / (priceData.length - 1)) * chartWidth;
+      const timeData = priceData[dataIndex];
+      
+      if (timeData && timeData.timestamp) {
+        const date = new Date(timeData.timestamp);
+        const timeStr = date.toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          hour12: false 
+        });
+        
+        ctx.fillText(timeStr, x, padding.top + chartHeight + 8);
+      }
+    }
   };
 
   // Handle interval change
