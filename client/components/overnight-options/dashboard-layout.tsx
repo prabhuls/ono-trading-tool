@@ -222,6 +222,7 @@ export function DashboardLayout() {
               chartIntervals={dashboardData.chartIntervals}
               lastUpdated={dashboardData.lastUpdated}
               onIntervalChange={handleIntervalChange}
+              hasAlgorithmResult={algorithmResult !== null && algorithmResult.buy_strike !== null && algorithmResult.sell_strike !== null}
             />
             <OptionChainOptimizer
               optionChain={optionChainData.length > 0 ? optionChainData : dashboardData.optionChain}

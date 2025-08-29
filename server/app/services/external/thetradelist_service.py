@@ -1529,8 +1529,16 @@ class TheTradeListService(ExternalAPIService):
                 period=period
             )
             
-            # Calculate date range based on period
-            end_date = datetime.now()
+            # Calculate date range based on period using ET timezone
+            try:
+                import pytz
+                et_tz = pytz.timezone('America/New_York')
+                end_date = datetime.now(et_tz).replace(tzinfo=None)  # Remove timezone for API compatibility
+                logger.info(f"Using ET timezone for intraday date range: {end_date}")
+            except ImportError:
+                end_date = datetime.now()
+                logger.warning("pytz not available, using local time for intraday date range")
+                
             if period == "1d":
                 start_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
             elif period == "5d":

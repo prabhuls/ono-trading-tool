@@ -11,6 +11,7 @@ interface SpyIntradayChartProps {
   chartIntervals: ChartTimeInterval[];
   lastUpdated: string;
   onIntervalChange?: (interval: string) => void;
+  hasAlgorithmResult?: boolean; // To know if strikes are from actual results
 }
 
 export function SpyIntradayChart({ 
@@ -19,7 +20,8 @@ export function SpyIntradayChart({
   currentPrice,
   chartIntervals,
   lastUpdated,
-  onIntervalChange 
+  onIntervalChange,
+  hasAlgorithmResult = false
 }: SpyIntradayChartProps) {
   const [chartData, setChartData] = useState<IntradayChartData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,12 +40,12 @@ export function SpyIntradayChart({
       
       const response = await api.chartData.getIntradayData('SPY', {
         interval,
-        buy_strike: buyStrike,
-        sell_strike: sellStrike
+        ...(hasAlgorithmResult ? { buy_strike: buyStrike, sell_strike: sellStrike } : {})
       });
       
       if (response.success && response.data) {
-        setChartData(response.data as IntradayChartData);
+        const chartData = response.data as IntradayChartData;
+        setChartData(chartData);
       } else {
         setError(response.message || 'Failed to fetch chart data');
       }
@@ -145,10 +147,10 @@ export function SpyIntradayChart({
 
     // Draw benchmark lines
     drawBenchmarkLine(chartData.benchmark_lines.current_price, '#60A5FA', 'Current');
-    if (chartData.benchmark_lines.buy_strike) {
+    if (chartData.benchmark_lines.buy_strike && chartData.benchmark_lines.buy_strike > 0) {
       drawBenchmarkLine(chartData.benchmark_lines.buy_strike, '#F97316', 'Buy', true);
     }
-    if (chartData.benchmark_lines.sell_strike) {
+    if (chartData.benchmark_lines.sell_strike && chartData.benchmark_lines.sell_strike > 0) {
       drawBenchmarkLine(chartData.benchmark_lines.sell_strike, '#EF4444', 'Sell', true);
     }
 
@@ -166,7 +168,7 @@ export function SpyIntradayChart({
   // Initial data fetch and redraw on data change
   useEffect(() => {
     fetchChartData(currentActiveInterval);
-  }, [buyStrike, sellStrike]); // Refetch when strikes change
+  }, [buyStrike, sellStrike, hasAlgorithmResult]); // Refetch when strikes change or algorithm result status changes
 
   useEffect(() => {
     if (chartData) {
@@ -211,14 +213,18 @@ export function SpyIntradayChart({
 
       {/* Legend */}
       <div className="flex gap-4 mb-4 text-sm">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-0.5 bg-orange-500"></div>
-          <span className="text-muted-foreground">Buy Strike ({buyStrike})</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-0.5 bg-red-500"></div>
-          <span className="text-muted-foreground">Sell Strike ({sellStrike})</span>
-        </div>
+        {chartData?.benchmark_lines?.buy_strike && (
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-0.5 bg-orange-500"></div>
+            <span className="text-muted-foreground">Buy Strike ({chartData.benchmark_lines.buy_strike.toFixed(0)})</span>
+          </div>
+        )}
+        {chartData?.benchmark_lines?.sell_strike && (
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-0.5 bg-red-500"></div>
+            <span className="text-muted-foreground">Sell Strike ({chartData.benchmark_lines.sell_strike.toFixed(0)})</span>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <div className="w-3 h-0.5 bg-blue-400"></div>
           <span className="text-muted-foreground">Current Price</span>
