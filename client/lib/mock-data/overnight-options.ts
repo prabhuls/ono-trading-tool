@@ -78,7 +78,8 @@ export const formatPercentage = (value: number | null | undefined): string => {
   if (value === null || value === undefined) {
     return '0.0%';
   }
-  return `${value.toFixed(1)}%`;
+  // Convert decimal to percentage (e.g., 0.143 -> 14.3%)
+  return `${(value * 100).toFixed(1)}%`;
 };
 
 // Helper function to format volume

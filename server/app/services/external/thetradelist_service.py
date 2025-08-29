@@ -1378,6 +1378,15 @@ class TheTradeListService(ExternalAPIService):
                     day_data = results.get("day", {})
                     details = results.get("details", {})
                     
+                    # Debug: Log the structure to see if IV is available
+                    logger.debug(
+                        "Option pricing data structure",
+                        option_ticker=option_ticker,
+                        results_keys=list(results.keys()) if results else [],
+                        last_quote_keys=list(last_quote.keys()) if last_quote else [],
+                        details_keys=list(details.keys()) if details else []
+                    )
+                    
                     # Validate that we have usable pricing data
                     bid = float(last_quote.get("bid", 0))
                     ask = float(last_quote.get("ask", 0))
@@ -1390,13 +1399,40 @@ class TheTradeListService(ExternalAPIService):
                         pricing_failures += 1
                         continue
                     
+                    # Try to extract implied volatility from various possible fields
+                    implied_vol = 0.0
+                    
+                    # Check multiple possible field names for IV
+                    iv_fields_to_try = [
+                        ('last_quote', 'implied_volatility'),
+                        ('last_quote', 'iv'), 
+                        ('details', 'implied_volatility'),
+                        ('details', 'iv'),
+                        ('greeks', 'implied_volatility'),
+                        ('greeks', 'iv'),
+                        ('results', 'implied_volatility'),
+                        ('results', 'iv')
+                    ]
+                    
+                    for source, field in iv_fields_to_try:
+                        source_data = {'last_quote': last_quote, 'details': details, 'greeks': results.get('greeks', {}), 'results': results}.get(source, {})
+                        if isinstance(source_data, dict) and field in source_data:
+                            try:
+                                iv_value = float(source_data.get(field, 0))
+                                if iv_value > 0:  # Only use if it's a positive value
+                                    implied_vol = iv_value
+                                    logger.info(f"Found IV {iv_value} in {source}.{field} for {option_ticker}")
+                                    break
+                            except (ValueError, TypeError):
+                                continue
+                    
                     enhanced_contract = {
                         "strike": float(details.get("strike_price", contract.get("strike_price", 0))),
                         "bid": bid,
                         "ask": ask,
                         "volume": int(day_data.get("volume", 0)),
                         "open_interest": int(results.get("open_interest", 0)),
-                        "implied_volatility": 0.0,  # TradeList doesn't provide IV in basic snapshot
+                        "implied_volatility": implied_vol,
                         "contract_ticker": option_ticker,
                         "expiration_date": contract.get("expiration_date"),
                         "last_updated": datetime.utcnow().isoformat() + "Z",
