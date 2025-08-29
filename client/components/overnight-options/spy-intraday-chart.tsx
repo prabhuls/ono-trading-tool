@@ -32,6 +32,22 @@ export function SpyIntradayChart({
   // Get current active interval from props
   const currentActiveInterval = chartIntervals.find(interval => interval.isActive)?.value || '5m';
 
+  // Helper function to format timestamp to ET 12-hour format
+  const formatTimeET = (timestamp: string): string => {
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleTimeString('en-US', {
+        timeZone: 'America/New_York',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      });
+    } catch {
+      return timestamp; // fallback to original if parsing fails
+    }
+  };
+
   // Fetch chart data from API
   const fetchChartData = async (interval: string = currentActiveInterval) => {
     try {
@@ -211,10 +227,12 @@ export function SpyIntradayChart({
       
       if (timeData && timeData.timestamp) {
         const date = new Date(timeData.timestamp);
+        // Convert to ET timezone and format in 12-hour format
         const timeStr = date.toLocaleTimeString('en-US', { 
-          hour: '2-digit', 
+          timeZone: 'America/New_York',
+          hour: 'numeric', 
           minute: '2-digit',
-          hour12: false 
+          hour12: true 
         });
         
         ctx.fillText(timeStr, x, padding.top + chartHeight + 8);
@@ -342,7 +360,7 @@ export function SpyIntradayChart({
           )}
         </div>
         <div>
-          Last updated: {chartData ? chartData.metadata.last_updated : lastUpdated}
+          Last updated: {chartData ? formatTimeET(chartData.metadata.last_updated) : formatTimeET(lastUpdated)}
         </div>
       </div>
     </Card>
