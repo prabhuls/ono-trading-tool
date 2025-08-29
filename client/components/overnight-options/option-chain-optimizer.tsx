@@ -20,7 +20,7 @@ export function OptionChainOptimizer({
 }: OptionChainOptimizerProps) {
   if (error) {
     return (
-      <Card className="p-4">
+      <Card className="p-4" style={{ borderColor: '#616266' }}>
         <h3 className="text-lg font-semibold text-foreground mb-4">
           Option Chain Optimizer ({expiration})
         </h3>
@@ -35,7 +35,7 @@ export function OptionChainOptimizer({
 
   if (isLoading) {
     return (
-      <Card className="p-4">
+      <Card className="p-4" style={{ borderColor: '#616266' }}>
         <h3 className="text-lg font-semibold text-foreground mb-4">
           Option Chain Optimizer ({expiration})
         </h3>
@@ -69,7 +69,7 @@ export function OptionChainOptimizer({
   const sellStrike = algorithmResult?.sell_strike;
 
   return (
-    <Card className="p-4">
+    <Card className="p-4" style={{ borderColor: '#616266' }}>
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-foreground">
           Option Chain Optimizer ({expiration})

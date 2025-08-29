@@ -127,7 +127,7 @@ export function TopRankedTrade({
       </div>
 
       {/* Recommended Spread Card */}
-      <Card className="p-4">
+      <Card className="p-4" style={{ borderColor: '#616266' }}>
         <div className="space-y-3">
           <div className="text-center">
             <div className="text-lg font-semibold text-foreground mb-2">

@@ -7,7 +7,7 @@ export function MarketStatus() {
   const { marketStatus, loading, error } = useMarketStatus();
   if (loading) {
     return (
-      <Card className="p-4">
+      <Card className="p-4" style={{ borderColor: '#616266' }}>
         <h3 className="text-lg font-semibold text-foreground mb-4">Market Status</h3>
         <div className="space-y-3">
           <div className="animate-pulse">
@@ -31,7 +31,7 @@ export function MarketStatus() {
   }
 
   return (
-    <Card className="p-4">
+    <Card className="p-4" style={{ borderColor: '#616266' }}>
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-semibold text-foreground">Market Status</h3>
         {error && (

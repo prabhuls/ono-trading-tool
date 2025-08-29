@@ -271,7 +271,7 @@ export function SpyIntradayChart({
   }, [chartData]);
 
   return (
-    <Card className="p-4">
+    <Card className="p-4" style={{ borderColor: '#616266' }}>
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-semibold text-foreground">SPY Intraday Chart</h3>
         <div className="flex gap-2">
