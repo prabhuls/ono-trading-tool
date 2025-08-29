@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlgorithmResult } from '@/types/overnight-options';
-import { formatCurrency, formatPercentage } from '@/lib/mock-data/overnight-options';
+import { formatCurrency, formatPercentage, formatROI } from '@/lib/mock-data/overnight-options';
 import { useStockPrice } from '@/lib/hooks/useStockPrice';
 import { RefreshCw } from 'lucide-react';
 import type { SupportedTicker } from '@/types/stock-price';
@@ -226,7 +226,7 @@ export function TopRankedTrade({
               </div>
               <div className="text-center">
                 <div className="text-green-400 font-medium">
-                  {algorithmResult.roi_potential ? formatPercentage(algorithmResult.roi_potential) : 'N/A'}
+                  {algorithmResult.roi_potential ? formatROI(algorithmResult.roi_potential) : 'N/A'}
                 </div>
                 <div className="text-xs text-muted-foreground">ROI Potential</div>
               </div>
@@ -236,8 +236,8 @@ export function TopRankedTrade({
           {algorithmResult && algorithmResult.buy_strike && algorithmResult.sell_strike && (
             <div className="text-center pt-2 border-t border-border">
               <div className="text-lg font-semibold text-blue-400">
-                Target ROI: {algorithmResult.target_roi ? formatPercentage(algorithmResult.target_roi) : 
-                            algorithmResult.roi_potential ? formatPercentage(algorithmResult.roi_potential) : 'N/A'}
+                Target ROI: {algorithmResult.target_roi ? formatROI(algorithmResult.target_roi) : 
+                            algorithmResult.roi_potential ? formatROI(algorithmResult.roi_potential) : 'N/A'}
               </div>
             </div>
           )}

@@ -73,13 +73,22 @@ export const formatCurrency = (value: number | null | undefined): string => {
   }).format(value);
 };
 
-// Helper function to format percentage
+// Helper function to format percentage (for IV - converts decimal to percentage)
 export const formatPercentage = (value: number | null | undefined): string => {
   if (value === null || value === undefined) {
     return '0.0%';
   }
   // Convert decimal to percentage (e.g., 0.143 -> 14.3%)
   return `${(value * 100).toFixed(1)}%`;
+};
+
+// Helper function to format ROI values (already in percentage form)
+export const formatROI = (value: number | null | undefined): string => {
+  if (value === null || value === undefined) {
+    return '0.0%';
+  }
+  // ROI values are already percentages (e.g., 85.2 -> 85.2%)
+  return `${value.toFixed(1)}%`;
 };
 
 // Helper function to format volume
