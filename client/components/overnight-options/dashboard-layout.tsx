@@ -7,6 +7,7 @@ import { MarketStatus } from './market-status';
 import { SpyIntradayChart } from './spy-intraday-chart';
 import { OptionChainOptimizer } from './option-chain-optimizer';
 import { StatusBars } from './status-bars';
+import { OutsideHoursMessage } from './outside-hours-message';
 import { mockDashboardData, mockStatusBars } from '@/lib/mock-data/overnight-options';
 import { api } from '@/lib/api';
 import type { 
@@ -30,6 +31,10 @@ export function DashboardLayout() {
   const [optionChainError, setOptionChainError] = useState<string | null>(null);
   const [currentSpyPrice, setCurrentSpyPrice] = useState<number>(585.27);
   const [maxCost, setMaxCost] = useState<number>(0.74); // Default max cost for algorithm
+  
+  // Active hours state
+  const [isActiveHours, setIsActiveHours] = useState<boolean | null>(null); // null = loading
+  const showScansOutsideHours = process.env.NEXT_PUBLIC_SHOW_SCANS_OUTSIDE_ACTIVE_HOURS === 'true';
 
   // Fetch market status from API
   const fetchMarketStatus = async (): Promise<void> => {
@@ -46,6 +51,9 @@ export function DashboardLayout() {
           isLive: marketStatus.is_live,
           activeTimeRange: marketStatus.active_time_range
         }));
+        
+        // Update active hours state
+        setIsActiveHours(marketStatus.is_live);
       }
     } catch (error) {
       console.error('Failed to fetch market status:', error);
@@ -182,6 +190,11 @@ export function DashboardLayout() {
 
   // Don't block render - show layout immediately
   // Individual components will handle their own loading states
+  
+  // Show outside hours message if not in active hours and environment variable is not set
+  if (isActiveHours === false && !showScansOutsideHours) {
+    return <OutsideHoursMessage />;
+  }
 
   return (
     <div className="min-h-screen dashboard-bg">

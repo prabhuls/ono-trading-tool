@@ -52,11 +52,11 @@ export const mockDashboardData: DashboardData = {
     { label: '15min', value: '15m', isActive: false },
   ],
   isLive: true,
-  activeTimeRange: '3:20 PM - 3:40 PM ET',
+  activeTimeRange: '3:00 PM - 4:00 PM ET',
 };
 
 export const mockStatusBars: StatusBarInfo = {
-  scannerActive: "Active 3:20-3:40 PM ET daily for optimal spread scanning.",
+  scannerActive: "Active 3:00-4:00 PM ET daily for optimal spread scanning.",
 };
 
 // Helper function to format currency

@@ -2,7 +2,7 @@
 Overnight Options Algorithm Service
 
 Implements the sophisticated multi-step algorithm to identify the optimal $1-wide call debit spread
-for SPY options during the critical 3:20-3:40 PM ET trading window.
+for SPY options during the critical 3:00-4:00 PM ET trading window.
 
 Based on the requirements from PROJECT_REQUIREMENTS.md:
 1. Filter strikes below current SPY price (in-the-money bias)

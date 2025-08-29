@@ -91,7 +91,7 @@ async def get_option_chain(
     4. Selects deepest ITM spread (lowest sell strike)
     5. Highlights BUY and SELL options
     
-    **Time Window**: Optimized for 3:20-3:40 PM ET trading window
+    **Time Window**: Optimized for 3:00-4:00 PM ET trading window
     
     Args:
         ticker: Stock ticker (currently only SPY supported)

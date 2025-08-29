@@ -12,9 +12,9 @@ class MarketStatusService:
     
     # Trading window constants (in ET)
     TRADING_START_HOUR = 15  # 3 PM ET
-    TRADING_START_MINUTE = 20  # 3:20 PM ET
-    TRADING_END_HOUR = 15  # 3 PM ET
-    TRADING_END_MINUTE = 40  # 3:40 PM ET
+    TRADING_START_MINUTE = 0  # 3:00 PM ET
+    TRADING_END_HOUR = 16  # 4 PM ET
+    TRADING_END_MINUTE = 0  # 4:00 PM ET
     
     @staticmethod
     def calculate_dst_dates(year: int) -> tuple[datetime, datetime]:
@@ -98,7 +98,7 @@ class MarketStatusService:
     @staticmethod
     def is_session_active(current_et: datetime) -> bool:
         """
-        Check if current ET time is in the 3:20-3:40 PM window
+        Check if current ET time is in the 3:00-4:00 PM window
         
         Args:
             current_et: Current Eastern Time
@@ -109,7 +109,7 @@ class MarketStatusService:
         current_hour = current_et.hour
         current_minute = current_et.minute
         
-        # Check if in 3:20 PM - 3:40 PM ET window
+        # Check if in 3:00 PM - 4:00 PM ET window
         start_minutes = MarketStatusService.TRADING_START_HOUR * 60 + MarketStatusService.TRADING_START_MINUTE
         end_minutes = MarketStatusService.TRADING_END_HOUR * 60 + MarketStatusService.TRADING_END_MINUTE
         current_minutes = current_hour * 60 + current_minute
@@ -119,7 +119,7 @@ class MarketStatusService:
     @staticmethod
     def calculate_next_session_utc(current_utc: datetime) -> datetime:
         """
-        Calculate the next 3:20 PM ET session start time in UTC
+        Calculate the next 3:00 PM ET session start time in UTC
         
         Args:
             current_utc: Current UTC datetime
@@ -245,7 +245,7 @@ class MarketStatusService:
             # Build response data
             result = {
                 "is_live": is_live,
-                "active_time_range": "3:20 PM - 3:40 PM ET",
+                "active_time_range": "3:00 PM - 4:00 PM ET",
                 "current_time_et": current_time_et,
                 "session_start_utc": session_start_utc.isoformat() + "Z",
                 "session_end_utc": session_end_utc.isoformat() + "Z",

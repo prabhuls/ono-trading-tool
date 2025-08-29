@@ -12,7 +12,7 @@ class MarketStatusResponse(BaseModel):
     active_time_range: str = Field(
         ..., 
         description="The active trading time range in Eastern Time",
-        example="3:20 PM - 3:40 PM ET"
+        example="3:00 PM - 4:00 PM ET"
     )
     current_time_et: str = Field(
         ..., 
@@ -39,7 +39,7 @@ class MarketStatusResponse(BaseModel):
         json_schema_extra = {
             "example": {
                 "is_live": False,
-                "active_time_range": "3:20 PM - 3:40 PM ET",
+                "active_time_range": "3:00 PM - 4:00 PM ET",
                 "current_time_et": "2:15 PM ET",
                 "session_start_utc": "2024-08-27T19:20:00Z",
                 "session_end_utc": "2024-08-27T19:40:00Z",

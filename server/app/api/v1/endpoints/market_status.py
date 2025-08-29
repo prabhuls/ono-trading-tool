@@ -26,7 +26,7 @@ async def get_market_status() -> JSONResponse:
     Get current market session status with calculated ET times
     
     This endpoint provides real-time information about the overnight options trading session:
-    - Session activity status (3:20 PM - 3:40 PM ET)
+    - Session activity status (3:00 PM - 4:00 PM ET)
     - Current Eastern Time (calculated from UTC, handles DST automatically)
     - Session start/end times in UTC
     - Next active session time if not currently active
