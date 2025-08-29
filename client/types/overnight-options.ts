@@ -54,7 +54,6 @@ export interface DashboardData {
 }
 
 export interface StatusBarInfo {
-  demoMode: string;
   scannerActive: string;
 }
 

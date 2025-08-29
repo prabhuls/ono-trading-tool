@@ -56,7 +56,6 @@ export const mockDashboardData: DashboardData = {
 };
 
 export const mockStatusBars: StatusBarInfo = {
-  demoMode: "Showing yesterday's 3:30 PM ET data with realistic option chain.",
   scannerActive: "Active 3:20-3:40 PM ET daily for optimal spread scanning.",
 };
 
