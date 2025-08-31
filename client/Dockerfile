@@ -52,7 +52,7 @@ USER nextjs
 # Expose port
 EXPOSE 3000
 
-ENV PORT 3000
+# Railway will provide PORT at runtime
 ENV HOSTNAME "0.0.0.0"
 
 # Start the application
