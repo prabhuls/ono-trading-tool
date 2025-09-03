@@ -8,6 +8,7 @@ from app.services.external.base import ExternalAPIService, ExternalAPIError
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.cache import redis_cache
+from app.services.tradelist.calculations import BlackScholesCalculator
 
 
 logger = get_logger(__name__)
@@ -1681,20 +1682,34 @@ class TheTradeListService(ExternalAPIService):
                         details_keys=list(details.keys()) if details else []
                     )
                     
-                    # Validate that we have usable pricing data
-                    bid = float(last_quote.get("bid", 0))
-                    ask = float(last_quote.get("ask", 0))
+                    # Validate that we have usable pricing data with proper null handling
+                    bid_raw = last_quote.get("bid")
+                    ask_raw = last_quote.get("ask")
+                    
+                    # Handle None values and convert to float safely
+                    try:
+                        bid = float(bid_raw) if bid_raw is not None else 0.0
+                    except (ValueError, TypeError):
+                        bid = 0.0
+                    
+                    try:
+                        ask = float(ask_raw) if ask_raw is not None else 0.0
+                    except (ValueError, TypeError):
+                        ask = 0.0
                     
                     if bid == 0 and ask == 0:
                         logger.debug(
                             "No pricing data available for contract",
-                            option_ticker=option_ticker
+                            option_ticker=option_ticker,
+                            bid_raw=bid_raw,
+                            ask_raw=ask_raw
                         )
                         pricing_failures += 1
                         continue
                     
-                    # Try to extract implied volatility from various possible fields
-                    implied_vol = 0.0
+                    # Enhanced implied volatility extraction with SPX fallback logic
+                    implied_vol = None  # Start with None to indicate unavailable data
+                    iv_source = "unavailable"
                     
                     # Check multiple possible field names for IV
                     iv_fields_to_try = [
@@ -1708,6 +1723,7 @@ class TheTradeListService(ExternalAPIService):
                         ('results', 'iv')
                     ]
                     
+                    # Try to extract IV from API data first
                     for source, field in iv_fields_to_try:
                         source_data = {'last_quote': last_quote, 'details': details, 'greeks': results.get('greeks', {}), 'results': results}.get(source, {})
                         if isinstance(source_data, dict) and field in source_data:
@@ -1715,18 +1731,133 @@ class TheTradeListService(ExternalAPIService):
                                 iv_value = float(source_data.get(field, 0))
                                 if iv_value > 0:  # Only use if it's a positive value
                                     implied_vol = iv_value
-                                    logger.info(f"Found IV {iv_value} in {source}.{field} for {option_ticker}")
+                                    iv_source = f"{source}.{field}"
+                                    logger.info(f"Found IV {iv_value} in {iv_source} for {option_ticker}")
                                     break
                             except (ValueError, TypeError):
                                 continue
                     
+                    # If no IV found from API and this is SPX, try Black-Scholes approximation
+                    if implied_vol is None and ticker.upper() == "SPX":
+                        try:
+                            # Calculate IV using Black-Scholes approximation with null safety
+                            # Ensure bid and ask are valid numbers before calculating midpoint
+                            if (bid is not None and ask is not None and 
+                                isinstance(bid, (int, float)) and isinstance(ask, (int, float)) and
+                                bid > 0 and ask > 0):
+                                market_price = (bid + ask) / 2.0
+                            else:
+                                market_price = 0.0
+                            
+                            if market_price > 0:
+                                # Extract strike price with null safety
+                                strike_raw = details.get("strike_price", contract.get("strike_price"))
+                                try:
+                                    strike_price = float(strike_raw) if strike_raw is not None else 0.0
+                                except (ValueError, TypeError):
+                                    strike_price = 0.0
+                                
+                                exp_date = contract.get("expiration_date", expiration_date)
+                                
+                                # Add comprehensive null checks before Black-Scholes calculation
+                                if (strike_price is not None and strike_price > 0 and 
+                                    exp_date is not None and 
+                                    current_underlying_price is not None and current_underlying_price > 0):
+                                    
+                                    # Calculate time to expiration
+                                    time_to_exp = BlackScholesCalculator.calculate_time_to_expiration(exp_date)
+                                    
+                                    # Validate all parameters are not None and have valid values
+                                    if (time_to_exp is not None and time_to_exp > 0 and 
+                                        market_price is not None and market_price > 0):
+                                        
+                                        logger.debug(
+                                            f"Black-Scholes parameters validated for {option_ticker}",
+                                            market_price=market_price,
+                                            current_underlying_price=current_underlying_price,
+                                            strike_price=strike_price,
+                                            time_to_exp=time_to_exp,
+                                            risk_free_rate=0.05
+                                        )
+                                        
+                                        # Approximate IV using Black-Scholes
+                                        approx_iv = BlackScholesCalculator.approximate_implied_volatility(
+                                            market_price=market_price,
+                                            S=current_underlying_price,
+                                            K=strike_price,
+                                            T=time_to_exp,
+                                            r=0.05  # 5% risk-free rate assumption
+                                        )
+                                        
+                                        if approx_iv is not None:
+                                            implied_vol = approx_iv
+                                            iv_source = "black_scholes_approximation"
+                                            logger.info(
+                                                f"Calculated approximate IV {approx_iv:.4f} for SPX {option_ticker} using Black-Scholes",
+                                                market_price=market_price,
+                                                strike=strike_price,
+                                                underlying=current_underlying_price,
+                                                time_to_exp=time_to_exp
+                                            )
+                                    else:
+                                        logger.debug(
+                                            f"Invalid Black-Scholes parameters for {option_ticker}",
+                                            time_to_exp=time_to_exp,
+                                            market_price=market_price
+                                        )
+                                else:
+                                    logger.debug(
+                                        f"Missing required parameters for Black-Scholes calculation for {option_ticker}",
+                                        strike_price=strike_price,
+                                        exp_date=exp_date,
+                                        current_underlying_price=current_underlying_price
+                                    )
+                        except Exception as bs_error:
+                            logger.debug(
+                                f"Black-Scholes IV calculation failed for {option_ticker}: {str(bs_error)}"
+                            )
+                    
+                    # Log the final IV result
+                    if implied_vol is not None:
+                        logger.debug(
+                            f"Final IV for {option_ticker}: {implied_vol:.4f} (source: {iv_source})"
+                        )
+                    else:
+                        logger.debug(
+                            f"No IV available for {option_ticker} - will use null value"
+                        )
+                    
+                    # Create enhanced contract with null safety for all numeric fields
+                    strike_raw = details.get("strike_price", contract.get("strike_price"))
+                    volume_raw = day_data.get("volume")
+                    open_interest_raw = results.get("open_interest")
+                    
+                    # Safely convert strike price
+                    try:
+                        strike = float(strike_raw) if strike_raw is not None else 0.0
+                    except (ValueError, TypeError):
+                        strike = 0.0
+                    
+                    # Safely convert volume
+                    try:
+                        volume = int(volume_raw) if volume_raw is not None else 0
+                    except (ValueError, TypeError):
+                        volume = 0
+                    
+                    # Safely convert open interest
+                    try:
+                        open_interest = int(open_interest_raw) if open_interest_raw is not None else 0
+                    except (ValueError, TypeError):
+                        open_interest = 0
+
                     enhanced_contract = {
-                        "strike": float(details.get("strike_price", contract.get("strike_price", 0))),
+                        "strike": strike,
                         "bid": bid,
                         "ask": ask,
-                        "volume": int(day_data.get("volume", 0)),
-                        "open_interest": int(results.get("open_interest", 0)),
-                        "implied_volatility": implied_vol,
+                        "volume": volume,
+                        "open_interest": open_interest,
+                        "implied_volatility": implied_vol,  # Now can be None for unavailable data
+                        "iv_source": iv_source,  # Track source of IV calculation
                         "contract_ticker": option_ticker,
                         "expiration_date": contract.get("expiration_date"),
                         "last_updated": datetime.utcnow().isoformat() + "Z",

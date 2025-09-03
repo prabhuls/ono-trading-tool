@@ -3,6 +3,7 @@ Calculations for TradeList data processing
 """
 from typing import List, Dict, Optional
 import statistics
+import math
 from datetime import datetime, timedelta
 
 
@@ -282,3 +283,139 @@ class OptionMetricsCalculator:
             score += 10
         
         return min(100, score)
+
+
+class BlackScholesCalculator:
+    """Black-Scholes option pricing and implied volatility calculations"""
+    
+    @staticmethod
+    def normal_cdf(x: float) -> float:
+        """
+        Cumulative distribution function for standard normal distribution
+        Using Abramowitz and Stegun approximation
+        """
+        return 0.5 * (1 + math.erf(x / math.sqrt(2)))
+    
+    @staticmethod
+    def black_scholes_call_price(
+        S: float,  # Current stock price
+        K: float,  # Strike price
+        T: float,  # Time to expiration (in years)
+        r: float,  # Risk-free rate
+        sigma: float  # Volatility
+    ) -> float:
+        """
+        Calculate theoretical call option price using Black-Scholes formula
+        
+        Args:
+            S: Current stock price
+            K: Strike price
+            T: Time to expiration in years
+            r: Risk-free rate (annualized)
+            sigma: Implied volatility (annualized)
+            
+        Returns:
+            Theoretical option price
+        """
+        if T <= 0 or sigma <= 0 or S <= 0 or K <= 0:
+            return 0.0
+            
+        try:
+            d1 = (math.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * math.sqrt(T))
+            d2 = d1 - sigma * math.sqrt(T)
+            
+            call_price = S * BlackScholesCalculator.normal_cdf(d1) - K * math.exp(-r * T) * BlackScholesCalculator.normal_cdf(d2)
+            return max(0.0, call_price)
+        except:
+            return 0.0
+    
+    @staticmethod
+    def approximate_implied_volatility(
+        market_price: float,  # Current market price of option
+        S: float,  # Current stock price
+        K: float,  # Strike price
+        T: float,  # Time to expiration (in years)
+        r: float = 0.05  # Risk-free rate (default 5%)
+    ) -> Optional[float]:
+        """
+        Approximate implied volatility using Newton-Raphson method
+        
+        Args:
+            market_price: Current market price of the option (bid/ask midpoint)
+            S: Current stock price
+            K: Strike price
+            T: Time to expiration in years
+            r: Risk-free rate (default 5%)
+            
+        Returns:
+            Implied volatility or None if calculation fails
+        """
+        if market_price <= 0 or S <= 0 or K <= 0 or T <= 0:
+            return None
+            
+        # Initial guess for volatility (20%)
+        sigma = 0.20
+        
+        # Newton-Raphson parameters
+        max_iterations = 100
+        tolerance = 1e-6
+        
+        try:
+            for i in range(max_iterations):
+                # Calculate theoretical price and vega (derivative with respect to sigma)
+                d1 = (math.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * math.sqrt(T))
+                
+                theoretical_price = BlackScholesCalculator.black_scholes_call_price(S, K, T, r, sigma)
+                
+                # Calculate vega (sensitivity to volatility)
+                vega = S * math.sqrt(T) * BlackScholesCalculator.normal_cdf(d1) / math.sqrt(2 * math.pi) * math.exp(-0.5 * d1**2)
+                
+                if abs(vega) < 1e-10:  # Avoid division by zero
+                    break
+                
+                # Newton-Raphson update
+                price_diff = theoretical_price - market_price
+                
+                if abs(price_diff) < tolerance:
+                    break
+                    
+                sigma_new = sigma - price_diff / vega
+                
+                # Keep sigma in reasonable bounds
+                sigma_new = max(0.01, min(5.0, sigma_new))
+                
+                if abs(sigma_new - sigma) < tolerance:
+                    break
+                    
+                sigma = sigma_new
+            
+            # Sanity check: return only reasonable IV values
+            if 0.05 <= sigma <= 3.0:  # Between 5% and 300%
+                return sigma
+            else:
+                return None
+                
+        except Exception:
+            return None
+    
+    @staticmethod
+    def calculate_time_to_expiration(expiration_date: str) -> float:
+        """
+        Calculate time to expiration in years
+        
+        Args:
+            expiration_date: Expiration date in YYYY-MM-DD format
+            
+        Returns:
+            Time to expiration in years
+        """
+        try:
+            exp_date = datetime.strptime(expiration_date, "%Y-%m-%d")
+            current_date = datetime.now()
+            
+            days_to_expiry = (exp_date - current_date).days
+            
+            # Convert to years (using 252 trading days per year)
+            return max(0.0, days_to_expiry / 365.0)
+        except:
+            return 0.0
