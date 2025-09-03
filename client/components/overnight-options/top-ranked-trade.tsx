@@ -138,6 +138,11 @@ export function TopRankedTrade({
               <div className="space-y-2">
                 <div className="h-6 bg-gray-800 rounded animate-pulse"></div>
                 <div className="h-4 bg-gray-800 rounded animate-pulse mx-8"></div>
+                {activeTicker === 'SPX' && (
+                  <div className="text-xs text-yellow-400 text-center mt-2">
+                    Loading {activeTicker} data... This may take 10-15 seconds
+                  </div>
+                )}
               </div>
             ) : algorithmError ? (
               <div className="text-red-400 text-sm">
@@ -251,7 +256,10 @@ export function TopRankedTrade({
           onClick={onScanForNewSpreads}
           disabled={algorithmLoading}
         >
-          {algorithmLoading ? 'Scanning...' : 'Scan for New Spreads'}
+          {algorithmLoading ? 
+            (activeTicker === 'SPX' ? 'Scanning SPX... (10-15s)' : 'Scanning...') : 
+            'Scan for New Spreads'
+          }
         </Button>
         <Button 
           variant="outline" 

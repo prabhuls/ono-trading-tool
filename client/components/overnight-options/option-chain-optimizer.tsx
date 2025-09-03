@@ -41,6 +41,16 @@ export function OptionChainOptimizer({
         <h3 className="text-lg font-semibold text-foreground mb-4">
 {ticker} Option Chain Optimizer ({expiration})
         </h3>
+        {ticker === 'SPX' && (
+          <div className="mb-4 p-3 bg-blue-900/20 border border-blue-700/30 rounded-lg">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+              <span className="text-sm text-blue-400">
+                Loading {ticker} option data and calculating implied volatility... This process takes 10-15 seconds.
+              </span>
+            </div>
+          </div>
+        )}
         <div className="space-y-2">
           {/* Table header */}
           <div className="grid grid-cols-6 gap-4 pb-2 border-b border-border">

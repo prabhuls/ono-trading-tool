@@ -260,7 +260,7 @@ async def get_raw_option_chain(
                 "ask": float(contract.get("ask", 0)),
                 "volume": int(contract.get("volume", 0)),
                 "openInterest": int(contract.get("open_interest", 0)),
-                "impliedVolatility": float(contract.get("implied_volatility", 0)),
+                "impliedVolatility": contract.get("implied_volatility") if contract.get("implied_volatility") is not None else None,
                 "isHighlighted": None  # No highlighting for raw data
             }
             formatted_contracts.append(formatted_contract)

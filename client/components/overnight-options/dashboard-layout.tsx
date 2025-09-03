@@ -17,6 +17,18 @@ import type {
   AlgorithmResult 
 } from '@/types/overnight-options';
 
+// Helper function to get default max cost based on ticker
+const getDefaultMaxCost = (ticker: string): number => {
+  switch (ticker) {
+    case 'SPY':
+      return 0.74; // Default for SPY
+    case 'SPX':
+      return 20.0; // Higher default for SPX options (typically 10-20x more expensive)
+    default:
+      return 0.74;
+  }
+};
+
 export function DashboardLayout() {
   const [dashboardData, setDashboardData] = useState(mockDashboardData);
   const [activeTicker, setActiveTicker] = useState('SPY');
@@ -30,7 +42,7 @@ export function DashboardLayout() {
   const [optionChainLoading, setOptionChainLoading] = useState(true); // Show loading for option chain initially
   const [optionChainError, setOptionChainError] = useState<string | null>(null);
   const [currentSpyPrice, setCurrentSpyPrice] = useState<number>(585.27);
-  const [maxCost, setMaxCost] = useState<number>(0.74); // Default max cost for algorithm
+  const [maxCost, setMaxCost] = useState<number>(getDefaultMaxCost(activeTicker)); // Default max cost for algorithm
   
   // Active hours state
   const [isActiveHours, setIsActiveHours] = useState<boolean | null>(null); // null = loading
@@ -82,7 +94,7 @@ export function DashboardLayout() {
           ask: item.ask,
           volume: item.volume,
           openInterest: item.open_interest || item.openInterest || 0,
-          impliedVolatility: item.implied_volatility || item.impliedVolatility || 0,
+          impliedVolatility: item.implied_volatility ?? item.impliedVolatility ?? null,
           isHighlighted: item.is_highlighted || item.isHighlighted || null
         }));
         
@@ -181,8 +193,12 @@ export function DashboardLayout() {
 
   const handleTickerChange = (ticker: string): void => {
     try {
-      // In a real app, this would change the data source
+      // Update the active ticker
       setActiveTicker(ticker);
+      
+      // Update max cost to ticker-specific default
+      const newMaxCost = getDefaultMaxCost(ticker);
+      setMaxCost(newMaxCost);
     } catch (error) {
       // Silent fail for now (no monitoring setup)
     }

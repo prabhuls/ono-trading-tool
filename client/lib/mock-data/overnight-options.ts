@@ -75,7 +75,7 @@ export const formatCurrency = (value: number | null | undefined): string => {
 // Helper function to format percentage (for IV - converts decimal to percentage)
 export const formatPercentage = (value: number | null | undefined): string => {
   if (value === null || value === undefined) {
-    return '0.0%';
+    return 'N/A';
   }
   // Convert decimal to percentage (e.g., 0.143 -> 14.3%)
   return `${(value * 100).toFixed(1)}%`;
