@@ -21,12 +21,21 @@ class TheTradeListService(ExternalAPIService):
     - Snapshot Locale endpoint for real-time market data
     - Grouped Locale endpoint for market statistics
     - Reference Ticker endpoint for ticker validation
+    - Range Data endpoint for intraday chart data
+    - Options Contracts endpoint for option chain data
+    - ISIN endpoint for specific ticker current prices
+    
+    SPX Data Source Strategy:
+    - CURRENT PRICE: Uses ISIN endpoint (US78378X1072) for single price point
+    - CHART DATA: Uses regular range-data endpoint with "SPX" ticker directly
+    - OPTIONS: Uses regular options-contracts endpoint with "SPX" ticker directly
     
     Features:
     - Automatic rate limiting and retry logic
     - Response caching with configurable TTL
     - Comprehensive error handling
     - Data normalization for consistent output
+    - SPX-specific routing based on data type needed
     """
     
     def __init__(self):
@@ -833,15 +842,209 @@ class TheTradeListService(ExternalAPIService):
             "status": "fallback"
         }
     
+    async def get_spx_price_via_isin(self) -> Dict[str, Any]:
+        """
+        Get SPX current price via ISIN endpoint
+        
+        IMPORTANT: This endpoint returns ONLY a single current price point,
+        NOT time series data. Use this for current price display only.
+        For SPX chart data, use the regular range-data endpoint with "SPX" ticker.
+        
+        Uses ISIN: US78378X1072 for SPX on the v3/data/isin endpoint
+        
+        Returns:
+            SPX current price data (single data point)
+            
+        Raises:
+            ExternalAPIError: On API errors
+        """
+        endpoint = "/v3/data/isin"
+        params = {"isin": "US78378X1072"}  # SPX ISIN
+        
+        try:
+            logger.info("Fetching SPX current price via ISIN endpoint (single data point only)", isin="US78378X1072")
+            
+            # Check cache first with ticker-specific key
+            cache_key = "stock_price:SPX:isin"
+            cached_data = redis_cache.get(f"external_api:{self.service_name}:{cache_key}")
+            if cached_data is not None:
+                logger.info("Using cached SPX ISIN price data")
+                return cached_data
+            
+            # Fetch fresh data from ISIN endpoint
+            raw_data = await self.get(endpoint, params=params)
+            
+            # Parse and normalize ISIN endpoint response
+            normalized_data = self._normalize_isin_price_data(raw_data, "SPX")
+            
+            # Cache the result for 30 seconds (same TTL as other price data)
+            redis_cache.set(
+                f"external_api:{self.service_name}:{cache_key}",
+                normalized_data,
+                ttl=self.cache_ttl
+            )
+            
+            logger.info(
+                "SPX current price retrieved successfully via ISIN",
+                price=normalized_data["price"],
+                change=normalized_data["change"],
+                data_type="single_price_point",
+                endpoint_used="isin"
+            )
+            
+            return normalized_data
+            
+        except ExternalAPIError:
+            # Re-raise API errors
+            raise
+        except Exception as e:
+            logger.error("Failed to get SPX price via ISIN", error=str(e))
+            raise ExternalAPIError(
+                message=f"Failed to get SPX price via ISIN: {str(e)}",
+                service=self.service_name
+            )
+    
+    def _normalize_isin_price_data(self, raw_data: Dict[str, Any], ticker: str) -> Dict[str, Any]:
+        """
+        Normalize ISIN endpoint response to match standard price data format
+        
+        ISIN endpoint provides ONLY current price (single data point), not time series.
+        This is used exclusively for SPX current price display.
+        
+        Expected ISIN response format:
+        {
+            "price": "6409.903",
+            "unix_timestamp": 1756857605,
+            "currency": null,
+            "change_absolute": -50.35699999999997,
+            "change_percent": -0.7794887512267303,
+            "meta": {
+                "name": "S&P 500",
+                "id": 1000002
+            }
+        }
+        
+        Args:
+            raw_data: Raw API response from ISIN endpoint (single price data)
+            ticker: Ticker symbol (e.g., "SPX")
+            
+        Returns:
+            Normalized current price data matching get_stock_price format
+        """
+        try:
+            # ISIN endpoint returns data directly at root level, not nested under "results"
+            # Extract price data from the actual ISIN response format
+            price = 0.0
+            change = 0.0
+            change_percent = 0.0
+            
+            # Handle ISIN endpoint direct response format
+            if "price" in raw_data:
+                try:
+                    # Price comes as string in ISIN endpoint, need to convert to float
+                    price = float(raw_data["price"])
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Failed to parse price from ISIN response: {raw_data.get('price')}, error: {e}")
+            
+            if "change_absolute" in raw_data:
+                try:
+                    # change_absolute maps to our "change" field
+                    change = float(raw_data["change_absolute"])
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Failed to parse change_absolute from ISIN response: {raw_data.get('change_absolute')}, error: {e}")
+            
+            if "change_percent" in raw_data:
+                try:
+                    # change_percent is already the correct field name
+                    change_percent = float(raw_data["change_percent"])
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Failed to parse change_percent from ISIN response: {raw_data.get('change_percent')}, error: {e}")
+            
+            # Fallback: try legacy format in case the response format differs
+            if price == 0.0:
+                logger.warning("ISIN price not found in expected format, trying legacy parsing")
+                
+                # Check if there's a nested results structure (legacy format)
+                results = raw_data.get("results", raw_data)  # Use raw_data itself if no results key
+                if isinstance(results, list) and results:
+                    results = results[0]  # Take first result if it's a list
+                
+                # Try legacy field names
+                legacy_price_fields = ["c", "close", "price", "last_price", "current_price"]
+                legacy_change_fields = ["change", "todaysChange", "daily_change", "change_absolute"]
+                legacy_change_percent_fields = ["changePercent", "todaysChangePerc", "change_percent", "daily_change_percent"]
+                
+                for field in legacy_price_fields:
+                    if field in results and results[field] is not None:
+                        try:
+                            price = float(results[field])
+                            logger.info(f"Found legacy price in field '{field}': {price}")
+                            break
+                        except (ValueError, TypeError):
+                            continue
+                
+                for field in legacy_change_fields:
+                    if field in results and results[field] is not None:
+                        try:
+                            change = float(results[field])
+                            logger.info(f"Found legacy change in field '{field}': {change}")
+                            break
+                        except (ValueError, TypeError):
+                            continue
+                
+                for field in legacy_change_percent_fields:
+                    if field in results and results[field] is not None:
+                        try:
+                            change_percent = float(results[field])
+                            logger.info(f"Found legacy change_percent in field '{field}': {change_percent}")
+                            break
+                        except (ValueError, TypeError):
+                            continue
+            
+            normalized_data = {
+                "ticker": ticker,
+                "price": price,
+                "change": change,
+                "change_percent": change_percent,
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
+            
+            logger.info(
+                "ISIN current price data normalized",
+                ticker=ticker,
+                price=price,
+                change=change,
+                change_percent=change_percent,
+                raw_response_keys=list(raw_data.keys()) if isinstance(raw_data, dict) else "non-dict",
+                source_format="isin_direct" if "price" in raw_data else "legacy_fallback"
+            )
+            
+            return normalized_data
+            
+        except Exception as e:
+            logger.error("Failed to normalize ISIN price data", ticker=ticker, error=str(e), raw_data_keys=list(raw_data.keys()) if isinstance(raw_data, dict) else "non-dict")
+            # Return fallback data
+            return {
+                "ticker": ticker,
+                "price": 0.0,
+                "change": 0.0,
+                "change_percent": 0.0,
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "error": str(e)
+            }
+
     async def get_stock_price(self, ticker: str) -> Dict[str, Any]:
         """
         Get current price for a single stock ticker
+        
+        ISIN endpoint is used ONLY for SPX current price (single data point).
+        Regular snapshot endpoint is used for all other tickers and purposes.
         
         Args:
             ticker: Stock ticker symbol (e.g., "SPY", "XSP", "SPX")
             
         Returns:
-            Stock price data with normalized format
+            Stock price data with normalized format (current price only)
             
         Raises:
             ExternalAPIError: On API errors or invalid ticker
@@ -859,7 +1062,12 @@ class TheTradeListService(ExternalAPIService):
         try:
             logger.info("Fetching stock price", ticker=ticker_upper)
             
-            # Use existing market snapshot method with specific ticker
+            # Route SPX to ISIN endpoint for CURRENT PRICE ONLY
+            # (ISIN only provides single price point, not time series)
+            if ticker_upper == "SPX":
+                return await self.get_spx_price_via_isin()
+            
+            # Use existing market snapshot method for SPY and XSP
             snapshot_data = await self.get_market_snapshot(tickers=f"{ticker_upper},")
             
             # Extract ticker data from response
@@ -915,11 +1123,14 @@ class TheTradeListService(ExternalAPIService):
         """
         Get current prices for multiple stock tickers
         
+        Routes SPX to ISIN endpoint for current price (single data point),
+        uses regular snapshot endpoint for other tickers.
+        
         Args:
             tickers: List of stock ticker symbols (e.g., ["SPY", "XSP", "SPX"])
             
         Returns:
-            Multiple stock prices data with normalized format
+            Multiple stock prices data with normalized format (current prices only)
             
         Raises:
             ExternalAPIError: On API errors or invalid tickers
@@ -938,44 +1149,51 @@ class TheTradeListService(ExternalAPIService):
         try:
             logger.info("Fetching multiple stock prices", tickers=tickers_upper)
             
-            # Create ticker string for API call
-            tickers_string = ",".join(tickers_upper) + ","
-            
-            # Use existing market snapshot method
-            snapshot_data = await self.get_market_snapshot(tickers=tickers_string)
-            
-            # Extract and normalize ticker data
-            api_tickers = snapshot_data.get("tickers", [])
-            if not api_tickers:
-                raise ExternalAPIError(
-                    message="No price data found for requested tickers",
-                    service=self.service_name
-                )
-            
-            # Process each ticker and create normalized response
             prices = []
-            found_tickers = set()
             
-            for ticker_info in api_tickers:
-                if not isinstance(ticker_info, dict):
-                    continue
-                    
-                ticker_symbol = ticker_info.get("ticker", "")
-                if ticker_symbol in tickers_upper:
-                    normalized_data = {
-                        "ticker": ticker_symbol,
-                        "price": float(ticker_info.get("price", 0)),
-                        "change": float(ticker_info.get("change", 0)),
-                        "change_percent": float(ticker_info.get("change_percent", 0)),
-                        "timestamp": datetime.utcnow().isoformat() + "Z"
-                    }
-                    prices.append(normalized_data)
-                    found_tickers.add(ticker_symbol)
+            # Handle SPX separately via ISIN endpoint
+            non_spx_tickers = [t for t in tickers_upper if t != "SPX"]
+            spx_requested = "SPX" in tickers_upper
             
-            # Check if any requested tickers were missing
+            # Get SPX current price via ISIN if requested (single data point)
+            if spx_requested:
+                try:
+                    spx_data = await self.get_spx_price_via_isin()
+                    prices.append(spx_data)
+                    logger.info("SPX current price retrieved via ISIN", price=spx_data.get("price"))
+                except Exception as e:
+                    logger.warning("Failed to get SPX current price via ISIN", error=str(e))
+            
+            # Get other tickers via snapshot endpoint
+            if non_spx_tickers:
+                tickers_string = ",".join(non_spx_tickers) + ","
+                
+                # Use existing market snapshot method
+                snapshot_data = await self.get_market_snapshot(tickers=tickers_string)
+                
+                # Extract and normalize ticker data
+                api_tickers = snapshot_data.get("tickers", [])
+                
+                for ticker_info in api_tickers:
+                    if not isinstance(ticker_info, dict):
+                        continue
+                        
+                    ticker_symbol = ticker_info.get("ticker", "")
+                    if ticker_symbol in non_spx_tickers:
+                        normalized_data = {
+                            "ticker": ticker_symbol,
+                            "price": float(ticker_info.get("price", 0)),
+                            "change": float(ticker_info.get("change", 0)),
+                            "change_percent": float(ticker_info.get("change_percent", 0)),
+                            "timestamp": datetime.utcnow().isoformat() + "Z"
+                        }
+                        prices.append(normalized_data)
+            
+            # Check if we got all requested tickers
+            found_tickers = {p["ticker"] for p in prices}
             missing_tickers = set(tickers_upper) - found_tickers
             if missing_tickers:
-                logger.warning("Some tickers not found in API response", missing=list(missing_tickers))
+                logger.warning("Some tickers not found in API responses", missing=list(missing_tickers))
             
             result = {"prices": prices}
             
@@ -983,7 +1201,8 @@ class TheTradeListService(ExternalAPIService):
                 "Multiple stock prices retrieved successfully",
                 requested_count=len(tickers_upper),
                 found_count=len(prices),
-                tickers=tickers_upper
+                tickers=tickers_upper,
+                spx_via_isin=spx_requested
             )
             
             return result
@@ -1007,8 +1226,11 @@ class TheTradeListService(ExternalAPIService):
         """
         Get options contracts for a specific underlying ticker
         
+        SPX options work directly with the options-contracts endpoint using "SPX" ticker.
+        No special handling or routing required.
+        
         Args:
-            underlying_ticker: The stock symbol (e.g., "SPY")
+            underlying_ticker: The stock symbol (e.g., "SPY", "SPX")
             expiration_date: Optional specific expiration date filter (YYYY-MM-DD)
             limit: Maximum number of results (default: 1000)
             
@@ -1020,7 +1242,7 @@ class TheTradeListService(ExternalAPIService):
         """
         endpoint = "/v1/data/options-contracts"
         params = {
-            "underlying_ticker": underlying_ticker.upper(),
+            "underlying_ticker": underlying_ticker.upper(),  # SPX works directly
             "limit": limit
         }
         
@@ -1029,7 +1251,8 @@ class TheTradeListService(ExternalAPIService):
                 "Fetching options contracts",
                 underlying_ticker=underlying_ticker.upper(),
                 expiration_date=expiration_date,
-                limit=limit
+                limit=limit,
+                endpoint=endpoint
             )
             
             raw_data = await self.get(endpoint, params=params, use_cache=True, cache_ttl=300)  # Cache for 5 minutes
@@ -1154,28 +1377,33 @@ class TheTradeListService(ExternalAPIService):
                 service=self.service_name
             )
 
-    async def get_next_trading_day_expiration(self) -> str:
+    async def get_next_trading_day_expiration(self, ticker: str = "SPY") -> str:
         """
-        Get the next available trading day expiration from API data
+        Get the next available expiration date from API data for the specified ticker
         
-        Instead of calculating theoretical dates, queries the API for actual
-        available expiration dates and returns the next one.
+        For SPY: Looks for next trading day expiration (daily options)
+        For SPX: Looks for nearest available expiration (weekly/monthly options)
+        
+        Args:
+            ticker: The ticker symbol to get expiration for (e.g., "SPY", "SPX")
         
         Returns:
-            Next available trading day expiration date in YYYY-MM-DD format
+            Next available expiration date in YYYY-MM-DD format
         """
+        ticker = ticker.upper()
+        
         try:
-            logger.info("Getting next available expiration from API")
+            logger.info("Getting next available expiration from API", ticker=ticker)
             
-            # Get all available SPY option contracts to find expiration dates
+            # Get all available option contracts for the specified ticker
             contracts_data = await self.get_options_contracts(
-                underlying_ticker="SPY",
+                underlying_ticker=ticker,
                 limit=1000
             )
             
             results = contracts_data.get("results", [])
             if not results:
-                logger.warning("No option contracts found for expiration date lookup")
+                logger.warning("No option contracts found for expiration date lookup", ticker=ticker)
                 # Fallback to calculated date
                 return self._calculate_next_trading_day()
             
@@ -1187,7 +1415,7 @@ class TheTradeListService(ExternalAPIService):
                     expiration_dates.add(exp_date)
             
             if not expiration_dates:
-                logger.warning("No expiration dates found in contracts")
+                logger.warning("No expiration dates found in contracts", ticker=ticker)
                 return self._calculate_next_trading_day()
             
             # Sort expiration dates and find next available
@@ -1205,7 +1433,29 @@ class TheTradeListService(ExternalAPIService):
                 today = datetime.now().strftime('%Y-%m-%d')
                 logger.warning("pytz not available, using local time for comparison")
             
-            # Find first expiration date after today
+            # Different logic for SPY vs SPX
+            if ticker == "SPY":
+                # SPY: Look for next trading day expiration (daily options)
+                next_trading_day = self._calculate_next_trading_day()
+                
+                # Check if the calculated next trading day has options available
+                if next_trading_day in sorted_expirations:
+                    logger.info(
+                        "SPY next trading day expiration found",
+                        expiration_date=next_trading_day,
+                        ticker=ticker
+                    )
+                    return next_trading_day
+                else:
+                    # Fall back to nearest available expiration for SPY
+                    logger.warning(
+                        "SPY next trading day expiration not available, using nearest",
+                        calculated_date=next_trading_day,
+                        available_dates=sorted_expirations[:5],  # Log first 5 for debugging
+                        ticker=ticker
+                    )
+            
+            # SPX or SPY fallback: Find nearest available expiration (any future date)
             next_available = None
             for exp_date in sorted_expirations:
                 if exp_date > today:
@@ -1213,18 +1463,21 @@ class TheTradeListService(ExternalAPIService):
                     break
             
             if next_available:
+                expiration_type = "daily" if ticker == "SPY" else "weekly/monthly"
                 logger.info(
                     "Next available expiration found via API",
+                    ticker=ticker,
                     expiration_date=next_available,
+                    expiration_type=expiration_type,
                     total_available=len(sorted_expirations)
                 )
                 return next_available
             else:
-                logger.warning("No future expiration dates found in API data")
+                logger.warning("No future expiration dates found in API data", ticker=ticker)
                 return self._calculate_next_trading_day()
                 
         except Exception as e:
-            logger.error("Failed to get next expiration from API", error=str(e))
+            logger.error("Failed to get next expiration from API", ticker=ticker, error=str(e))
             # Fallback to calculated date
             return self._calculate_next_trading_day()
     
@@ -1259,8 +1512,11 @@ class TheTradeListService(ExternalAPIService):
         """
         Build a complete option chain with live pricing data
         
+        SPX options work directly with the regular options-contracts endpoint
+        using "SPX" ticker - no special handling required.
+        
         Args:
-            ticker: Stock ticker symbol (default: "SPY")
+            ticker: Stock ticker symbol (supports "SPY", "SPX")
             expiration_date: Option expiration date (default: next trading day)
             
         Returns:
@@ -1270,7 +1526,7 @@ class TheTradeListService(ExternalAPIService):
             ExternalAPIError: On API errors
         """
         if not expiration_date:
-            expiration_date = await self.get_next_trading_day_expiration()
+            expiration_date = await self.get_next_trading_day_expiration(ticker)
         
         try:
             logger.info(
@@ -1279,10 +1535,17 @@ class TheTradeListService(ExternalAPIService):
                 expiration_date=expiration_date
             )
             
-            # Get options contracts
+            # Get options contracts - SPX works directly with options-contracts endpoint
             contracts_data = await self.get_options_contracts(
-                underlying_ticker=ticker,
+                underlying_ticker=ticker,  # Use SPX ticker directly
                 expiration_date=expiration_date
+            )
+            
+            logger.info(
+                "Retrieved options contracts",
+                ticker=ticker,
+                expiration_date=expiration_date,
+                total_results=len(contracts_data.get("results", []))
             )
             
             contracts = contracts_data.get("results", [])
@@ -1314,25 +1577,56 @@ class TheTradeListService(ExternalAPIService):
             )
             
             # OPTIMIZATION: Limit API calls by only fetching pricing for near-the-money contracts
-            # Get current SPY price first (single API call)
+            # Get current underlying price first (single API call)
             try:
-                spy_price_data = await self.get_stock_price("SPY")
-                current_spy_price = spy_price_data.get("price", 585.0)
+                underlying_price_data = await self.get_stock_price(ticker)
+                current_underlying_price = underlying_price_data.get("price", 585.0 if ticker == "SPY" else 5850.0)
             except:
-                current_spy_price = 585.0  # Fallback price
+                # Fallback prices based on ticker
+                current_underlying_price = 585.0 if ticker == "SPY" else 5850.0
             
-            # Filter to only near-the-money contracts (within $15 of current price)
-            # This is where the algorithm will find optimal spreads anyway
-            nearby_contracts = [
-                contract for contract in call_contracts
-                if abs(float(contract.get("strike_price", 0)) - current_spy_price) <= 15
-            ]
+            # Filter to only near-the-money contracts
+            # For SPY: within $15 of current price
+            # For SPX: Use adaptive range - all available strikes if deep ITM situation
+            if ticker == "SPY":
+                price_range = 15
+                nearby_contracts = [
+                    contract for contract in call_contracts
+                    if abs(float(contract.get("strike_price", 0)) - current_underlying_price) <= price_range
+                ]
+            else:  # SPX
+                # Check if we're in a deep ITM situation (all strikes significantly below current price)
+                strike_prices = [float(contract.get("strike_price", 0)) for contract in call_contracts]
+                max_available_strike = max(strike_prices) if strike_prices else 0
+                
+                # If the highest available strike is more than 1000 points below current price,
+                # use all available strikes (deep ITM scenario)
+                if max_available_strike > 0 and (current_underlying_price - max_available_strike) > 1000:
+                    nearby_contracts = call_contracts  # Use all available strikes
+                    price_range = current_underlying_price - min(strike_prices) if strike_prices else 0
+                    logger.info(
+                        "SPX deep ITM scenario detected - using all available strikes",
+                        current_price=current_underlying_price,
+                        max_available_strike=max_available_strike,
+                        gap=current_underlying_price - max_available_strike,
+                        total_strikes=len(call_contracts)
+                    )
+                else:
+                    # Normal SPX filtering: within $1500 of current price
+                    price_range = 1500
+                    nearby_contracts = [
+                        contract for contract in call_contracts
+                        if abs(float(contract.get("strike_price", 0)) - current_underlying_price) <= price_range
+                    ]
             
             logger.info(
                 "Optimized contract selection",
+                ticker=ticker,
                 total_contracts=len(call_contracts),
                 nearby_contracts=len(nearby_contracts),
-                current_price=current_spy_price
+                current_price=current_underlying_price,
+                price_range=price_range,
+                is_deep_itm_scenario=(ticker == "SPX" and len(nearby_contracts) == len(call_contracts))
             )
             
             # Enhance contracts with pricing data (limited set with error handling)
@@ -1515,8 +1809,11 @@ class TheTradeListService(ExternalAPIService):
         """
         Get intraday OHLCV data for chart display
         
+        Uses regular TheTradeList range-data endpoint for all tickers including SPX.
+        SPX works directly with the range-data endpoint, not ISIN.
+        
         Args:
-            ticker: Stock ticker symbol (e.g., "SPY")
+            ticker: Stock ticker symbol (e.g., "SPY", "SPX")
             interval: Time interval ("1m", "5m", "15m", "30m", "1h")
             period: Time period ("1d", "5d", "1w")
             
@@ -1584,15 +1881,23 @@ class TheTradeListService(ExternalAPIService):
             else:
                 start_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
             
-            # Use TheTradeList range-data endpoint
+            # Use TheTradeList range-data endpoint for ALL tickers (including SPX)
+            # SPX works directly with this endpoint, no special ISIN handling needed
             endpoint = "/v1/data/range-data"
             params = {
-                "ticker": ticker_upper,
+                "ticker": ticker_upper,  # Use SPX ticker directly
                 "range": interval_mapping[interval],
                 "startdate": start_date.strftime("%Y-%m-%d"),
                 "enddate": end_date.strftime("%Y-%m-%d"),
                 "limit": 200  # Reasonable limit for intraday data
             }
+            
+            logger.info(
+                "Using range-data endpoint for intraday data",
+                ticker=ticker_upper,
+                endpoint=endpoint,
+                params=params
+            )
             
             # Use caching for intraday data (1-2 minutes)
             cache_key = f"intraday_data:{ticker_upper}:{interval}:{period}"
@@ -1601,7 +1906,16 @@ class TheTradeListService(ExternalAPIService):
                 logger.info("Using cached intraday data", ticker=ticker_upper, interval=interval, period=period)
                 return cached_data
             
-            # Fetch fresh data
+            # Fetch fresh data from range-data endpoint
+            # NOTE: SPX works directly with this endpoint, no ISIN routing needed
+            logger.info(
+                "Fetching intraday data from TheTradeList",
+                ticker=ticker_upper,
+                endpoint=endpoint,
+                using_isin=False,  # SPX uses regular endpoint for chart data
+                data_type="time_series"
+            )
+            
             raw_data = await self.get(endpoint, params=params)
             
             # Normalize the response
@@ -1615,7 +1929,9 @@ class TheTradeListService(ExternalAPIService):
                 ticker=ticker_upper,
                 interval=interval,
                 period=period,
-                data_points=len(normalized_data.get("price_data", []))
+                data_points=len(normalized_data.get("price_data", [])),
+                endpoint_used=endpoint,
+                data_source="range_data_endpoint"
             )
             
             return normalized_data
@@ -1705,9 +2021,9 @@ class TheTradeListService(ExternalAPIService):
             # an async call to get_stock_price here since this is a sync method.
             # Current price will be fetched separately by the calling code if needed.
             
-            # If no current price from data, use fallback
+            # If no current price from data, use fallback based on ticker
             if current_price == 0.0:
-                current_price = 585.0  # Fallback SPY price
+                current_price = 585.0 if ticker == "SPY" else 5850.0  # Fallback prices
             
             # Create benchmark lines (current price and placeholder strikes)
             benchmark_lines = {

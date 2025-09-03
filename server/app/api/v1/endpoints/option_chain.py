@@ -63,8 +63,8 @@ async def get_cached_option_chain(cache_key: str, fetch_func, ttl: int = 30):
 async def get_option_chain(
     ticker: str = Path(
         ..., 
-        description="Stock ticker symbol (currently supports SPY only)", 
-        regex="^SPY$"
+        description="Stock ticker symbol (supports SPY and SPX)", 
+        regex="^(SPY|SPX)$"
     ),
     expiration_date: Optional[str] = Query(
         None,
@@ -73,9 +73,9 @@ async def get_option_chain(
     ),
     max_cost: Optional[float] = Query(
         0.74,
-        description="Maximum spread cost threshold (default: $0.74)",
+        description="Maximum spread cost threshold (default: $0.74). SPY: $0.50-$2.00 for $1-wide spreads, SPX: $5.00-$50.00 for $10-wide spreads",
         ge=0.01,
-        le=2.00
+        le=50.00
     ),
     current_user = Depends(optional_user)
 ) -> JSONResponse:
@@ -83,18 +83,22 @@ async def get_option_chain(
     Get option chain with overnight algorithm applied
     
     Retrieves real-time option chain data and applies the sophisticated overnight options
-    algorithm to identify optimal $1-wide call debit spreads. The algorithm:
+    algorithm to identify optimal call debit spreads. The algorithm:
     
-    1. Filters strikes below current SPY price (ITM bias)
-    2. Calculates $1-wide spread costs
+    1. Filters strikes below current underlying price (ITM bias)
+    2. Calculates spread costs (SPY: $1-wide spreads, SPX: $10-wide spreads)
     3. Applies maximum cost filtering
     4. Selects deepest ITM spread (lowest sell strike)
     5. Highlights BUY and SELL options
     
     **Time Window**: Optimized for 3:00-4:00 PM ET trading window
     
+    **Spread Cost Ranges**:
+    - SPY: Typically $0.50-$2.00 for $1-wide spreads
+    - SPX: Typically $5.00-$50.00 for $10-wide spreads (proportional to ~10x price scale)
+    
     Args:
-        ticker: Stock ticker (currently only SPY supported)
+        ticker: Stock ticker (supports SPY and SPX)
         expiration_date: Option expiration date (optional, defaults to next trading day)
         max_cost: Maximum spread cost threshold in dollars (default: $0.74)
         
@@ -191,8 +195,8 @@ async def get_option_chain(
 async def get_raw_option_chain(
     ticker: str = Path(
         ..., 
-        description="Stock ticker symbol (currently supports SPY only)", 
-        regex="^SPY$"
+        description="Stock ticker symbol (supports SPY and SPX)", 
+        regex="^(SPY|SPX)$"
     ),
     expiration_date: Optional[str] = Query(
         None,
@@ -208,7 +212,7 @@ async def get_raw_option_chain(
     Useful for debugging, analysis, or when you need unprocessed option data.
     
     Args:
-        ticker: Stock ticker (currently only SPY supported)
+        ticker: Stock ticker (supports SPY and SPX)
         expiration_date: Option expiration date (optional, defaults to next trading day)
         
     Returns:
@@ -241,9 +245,9 @@ async def get_raw_option_chain(
             ttl=30
         )
         
-        # Get current SPY price for metadata
-        spy_price_data = await tradelist_service.get_stock_price("SPY")
-        current_price = float(spy_price_data.get("price", 0))
+        # Get current underlying price for metadata
+        underlying_price_data = await tradelist_service.get_stock_price(ticker.upper())
+        current_price = float(underlying_price_data.get("price", 0))
         
         # Format response to match expected schema
         contracts = option_chain_data.get("contracts", [])
@@ -343,7 +347,7 @@ async def get_algorithm_health() -> JSONResponse:
         
         # Test basic algorithm components
         try:
-            next_expiration = await tradelist_service.get_next_trading_day_expiration()
+            next_expiration = await tradelist_service.get_next_trading_day_expiration("SPY")
             algorithm_ready = True
         except Exception as e:
             logger.warning("Algorithm initialization test failed", error=str(e))

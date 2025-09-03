@@ -4,6 +4,7 @@ import { OptionChainData, AlgorithmResult } from '@/types/overnight-options';
 import { formatCurrency, formatPercentage, formatVolume } from '@/lib/mock-data/overnight-options';
 
 interface OptionChainOptimizerProps {
+  ticker: string; // The ticker symbol (SPY, SPX, etc.)
   optionChain: OptionChainData[];
   expiration: string;
   isLoading?: boolean;
@@ -12,6 +13,7 @@ interface OptionChainOptimizerProps {
 }
 
 export function OptionChainOptimizer({ 
+  ticker,
   optionChain, 
   expiration, 
   isLoading = false, 
@@ -22,7 +24,7 @@ export function OptionChainOptimizer({
     return (
       <Card className="p-4" style={{ borderColor: '#616266' }}>
         <h3 className="text-lg font-semibold text-foreground mb-4">
-          Option Chain Optimizer ({expiration})
+{ticker} Option Chain Optimizer ({expiration})
         </h3>
         <Alert variant="destructive">
           <AlertDescription>
@@ -37,7 +39,7 @@ export function OptionChainOptimizer({
     return (
       <Card className="p-4" style={{ borderColor: '#616266' }}>
         <h3 className="text-lg font-semibold text-foreground mb-4">
-          Option Chain Optimizer ({expiration})
+{ticker} Option Chain Optimizer ({expiration})
         </h3>
         <div className="space-y-2">
           {/* Table header */}
@@ -72,7 +74,7 @@ export function OptionChainOptimizer({
     <Card className="p-4" style={{ borderColor: '#616266' }}>
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-foreground">
-          Option Chain Optimizer ({expiration})
+{ticker} Option Chain Optimizer ({expiration})
         </h3>
         
         {algorithmResult && (

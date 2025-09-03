@@ -1,12 +1,14 @@
 """
 Overnight Options Algorithm Service
 
-Implements the sophisticated multi-step algorithm to identify the optimal $1-wide call debit spread
-for SPY options during the critical 3:00-4:00 PM ET trading window.
+Implements the sophisticated multi-step algorithm to identify optimal call debit spreads
+for SPY/SPX options during the critical 3:00-4:00 PM ET trading window.
 
 Based on the requirements from PROJECT_REQUIREMENTS.md:
-1. Filter strikes below current SPY price (in-the-money bias)
-2. Calculate $1-wide spreads with max cost filtering (default $0.74)
+1. Filter strikes below current underlying price (in-the-money bias)
+2. Calculate spreads with max cost filtering (default $0.74)
+   - SPY: $1-wide spreads
+   - SPX: $10-wide spreads (proportional to ~10x price scale)
 3. Select deepest ITM spread (lowest sell strike)
 4. Mark BUY and SELL strikes with highlighting
 """
@@ -26,7 +28,7 @@ class OvernightOptionsAlgorithm:
     Overnight Options Algorithm implementation
     
     This service implements the overnight options trading algorithm that identifies
-    optimal $1-wide call debit spreads for SPY options.
+    optimal call debit spreads for SPY ($1-wide) and SPX ($10-wide) options.
     """
     
     def __init__(self, max_cost_threshold: float = 0.74):
@@ -39,35 +41,40 @@ class OvernightOptionsAlgorithm:
         self.max_cost_threshold = max_cost_threshold
         self.thetradelist_service = get_thetradelist_service()
     
-    async def get_current_spy_price(self) -> float:
+    async def get_current_price(self, ticker: str) -> float:
         """
-        Get current SPY price from TheTradeList API
+        Get current underlying price from TheTradeList API
+        
+        Args:
+            ticker: Underlying ticker symbol (e.g., "SPY", "SPX")
         
         Returns:
-            Current SPY price as float
+            Current underlying price as float
             
         Raises:
-            ExternalAPIError: If unable to get SPY price
+            ExternalAPIError: If unable to get underlying price
         """
         try:
-            price_data = await self.thetradelist_service.get_stock_price("SPY")
+            price_data = await self.thetradelist_service.get_stock_price(ticker)
             return float(price_data.get("price", 0))
         except Exception as e:
-            logger.error("Failed to get SPY price for algorithm", error=str(e))
+            logger.error("Failed to get underlying price for algorithm", ticker=ticker, error=str(e))
             raise ExternalAPIError(
-                message=f"Failed to get SPY price: {str(e)}",
+                message=f"Failed to get {ticker} price: {str(e)}",
                 service="overnight_options_algorithm"
             )
     
-    def calculate_spread_cost(self, buy_option: Dict[str, Any], sell_option: Dict[str, Any]) -> float:
+    def calculate_spread_cost(self, buy_option: Dict[str, Any], sell_option: Dict[str, Any], ticker: str = "SPY") -> float:
         """
-        Calculate the mid-price cost of a $1-wide call debit spread
+        Calculate the mid-price cost of a spread
         
+        SPY: $1-wide spreads, SPX: $10-wide spreads (scaled appropriately)
         Formula: (Buy Ask - Sell Bid) / 2
         
         Args:
             buy_option: Lower strike option to buy (more expensive)
             sell_option: Higher strike option to sell (less expensive)
+            ticker: Underlying ticker for spread width determination
             
         Returns:
             Spread cost as float
@@ -91,17 +98,19 @@ class OvernightOptionsAlgorithm:
             )
             return 0.0
     
-    def calculate_spread_metrics(self, spread_cost: float) -> Dict[str, float]:
+    def calculate_spread_metrics(self, spread_cost: float, ticker: str = "SPY") -> Dict[str, float]:
         """
         Calculate risk/reward metrics for a spread
         
         Args:
             spread_cost: Cost of the spread
+            ticker: Underlying ticker for spread width determination
             
         Returns:
             Dictionary with max_reward, max_risk, roi_potential, profit_target
         """
-        max_value = 1.00  # $1 spread width
+        # Spread width: SPY uses $1, SPX uses $10
+        max_value = 1.00 if ticker == "SPY" else 10.00
         max_reward = max_value - spread_cost
         max_risk = spread_cost
         roi_potential = (max_reward / spread_cost * 100) if spread_cost > 0 else 0
@@ -114,30 +123,104 @@ class OvernightOptionsAlgorithm:
             "profit_target": round(profit_target, 2)
         }
     
-    def filter_itm_strikes(self, contracts: List[Dict[str, Any]], current_price: float) -> List[Dict[str, Any]]:
+    def filter_itm_strikes(self, contracts: List[Dict[str, Any]], current_price: float, ticker: str = "SPY") -> List[Dict[str, Any]]:
         """
-        Filter strikes below current SPY price (in-the-money bias)
+        Filter strikes below current underlying price (in-the-money bias)
+        
+        For SPX, handles deep ITM scenarios where all available strikes are well below current price.
+        In such cases, uses strikes closest to current price even if they're deep ITM.
         
         Args:
             contracts: List of option contracts
-            current_price: Current SPY price
+            current_price: Current underlying price
+            ticker: Underlying ticker symbol
             
         Returns:
-            Filtered list of contracts below current price
+            Filtered list of contracts below current price (or closest available for SPX)
         """
         try:
-            itm_contracts = []
+            # Extract all strikes to analyze the range
+            strikes = []
             for contract in contracts:
                 strike = float(contract.get("strike", 0))
-                if strike < current_price:
-                    itm_contracts.append(contract)
+                if strike > 0:
+                    strikes.append(strike)
             
+            if not strikes:
+                logger.warning("No valid strikes found in contracts", ticker=ticker)
+                return []
+            
+            max_available_strike = max(strikes)
+            min_available_strike = min(strikes)
+            
+            # Log strike analysis
+            logger.info(
+                "Strike analysis",
+                ticker=ticker,
+                current_price=current_price,
+                max_available_strike=max_available_strike,
+                min_available_strike=min_available_strike,
+                gap_to_highest=(current_price - max_available_strike),
+                total_strikes=len(strikes)
+            )
+            
+            itm_contracts = []
+            
+            # For SPY: standard ITM filtering (strikes below current price)
+            if ticker == "SPY":
+                for contract in contracts:
+                    strike = float(contract.get("strike", 0))
+                    if strike < current_price:
+                        itm_contracts.append(contract)
+            
+            # For SPX: Handle deep ITM scenarios
+            else:  # SPX
+                # Check if we're in deep ITM scenario (highest strike > 1000 points below current)
+                if (current_price - max_available_strike) > 1000:
+                    logger.info(
+                        "SPX deep ITM scenario - using strikes closest to current price",
+                        ticker=ticker,
+                        current_price=current_price,
+                        max_available_strike=max_available_strike,
+                        gap=current_price - max_available_strike
+                    )
+                    
+                    # Use the upper portion of available strikes (closest to current price)
+                    # Take strikes that are within reasonable range of the highest available
+                    threshold = max_available_strike - 500  # Use strikes within 500 points of the highest
+                    
+                    for contract in contracts:
+                        strike = float(contract.get("strike", 0))
+                        if strike >= threshold:  # Use strikes close to the highest available
+                            itm_contracts.append(contract)
+                
+                else:
+                    # Normal SPX filtering - strikes below current price
+                    for contract in contracts:
+                        strike = float(contract.get("strike", 0))
+                        if strike < current_price:
+                            itm_contracts.append(contract)
+            
+            # Log final results
             logger.info(
                 "ITM contracts filtered",
+                ticker=ticker,
                 total_contracts=len(contracts),
                 itm_contracts=len(itm_contracts),
-                current_price=current_price
+                current_price=current_price,
+                filtering_strategy="deep_itm" if (ticker == "SPX" and (current_price - max_available_strike) > 1000) else "standard_itm"
             )
+            
+            # Additional debug logging for strikes included
+            if itm_contracts:
+                included_strikes = [float(c.get("strike", 0)) for c in itm_contracts]
+                logger.info(
+                    "ITM strikes included",
+                    ticker=ticker,
+                    min_strike=min(included_strikes),
+                    max_strike=max(included_strikes),
+                    strike_count=len(included_strikes)
+                )
             
             return itm_contracts
             
@@ -147,13 +230,17 @@ class OvernightOptionsAlgorithm:
     
     def find_qualifying_spreads(
         self, 
-        itm_contracts: List[Dict[str, Any]]
+        itm_contracts: List[Dict[str, Any]],
+        ticker: str = "SPY"
     ) -> List[Dict[str, Any]]:
         """
-        Find all $1-wide spreads that qualify based on cost threshold
+        Find all spreads that qualify based on cost threshold
+        
+        SPY: $1-wide spreads, SPX: $10-wide spreads
         
         Args:
             itm_contracts: List of ITM option contracts
+            ticker: Underlying ticker symbol
             
         Returns:
             List of qualifying spreads with their metrics
@@ -163,11 +250,30 @@ class OvernightOptionsAlgorithm:
         # Sort contracts by strike price for easier pairing
         sorted_contracts = sorted(itm_contracts, key=lambda x: float(x.get("strike", 0)))
         
+        # Determine spread width based on ticker
+        spread_width = 1.0 if ticker == "SPY" else 10.0
+        
+        # Log detailed contract information
+        contract_strikes = [float(c.get("strike", 0)) for c in sorted_contracts]
+        logger.info(
+            "Spread finding details",
+            ticker=ticker,
+            spread_width=spread_width,
+            total_contracts=len(sorted_contracts),
+            available_strikes=contract_strikes[:10] if len(contract_strikes) > 10 else contract_strikes,  # Log first 10 strikes
+            max_cost_threshold=self.max_cost_threshold
+        )
+        
+        spreads_attempted = 0
+        spreads_with_missing_sell = 0
+        spreads_with_invalid_cost = 0
+        spreads_too_expensive = 0
+        
         for i, buy_contract in enumerate(sorted_contracts):
             buy_strike = float(buy_contract.get("strike", 0))
             
-            # Find the sell contract (strike = buy_strike + 1)
-            sell_strike = buy_strike + 1
+            # Find the sell contract (strike = buy_strike + spread_width)
+            sell_strike = buy_strike + spread_width
             sell_contract = None
             
             for sell_candidate in sorted_contracts[i+1:]:
@@ -175,15 +281,58 @@ class OvernightOptionsAlgorithm:
                     sell_contract = sell_candidate
                     break
             
+            spreads_attempted += 1
+            
             if not sell_contract:
-                continue  # No matching $1-wide spread found
+                spreads_with_missing_sell += 1
+                logger.debug(
+                    "No matching sell contract found",
+                    ticker=ticker,
+                    buy_strike=buy_strike,
+                    target_sell_strike=sell_strike,
+                    spread_width=spread_width
+                )
+                continue  # No matching spread found
             
             # Calculate spread cost
-            spread_cost = self.calculate_spread_cost(buy_contract, sell_contract)
+            spread_cost = self.calculate_spread_cost(buy_contract, sell_contract, ticker)
+            
+            # Debug spread cost calculation
+            logger.debug(
+                "Spread cost calculated",
+                ticker=ticker,
+                buy_strike=buy_strike,
+                sell_strike=sell_strike,
+                spread_cost=spread_cost,
+                buy_ask=buy_contract.get("ask", 0),
+                sell_bid=sell_contract.get("bid", 0),
+                max_threshold=self.max_cost_threshold
+            )
             
             # Check if spread qualifies based on max cost threshold
-            if spread_cost <= self.max_cost_threshold and spread_cost > 0:
-                metrics = self.calculate_spread_metrics(spread_cost)
+            if spread_cost <= 0:
+                spreads_with_invalid_cost += 1
+                logger.debug(
+                    "Invalid spread cost",
+                    ticker=ticker,
+                    buy_strike=buy_strike,
+                    sell_strike=sell_strike,
+                    spread_cost=spread_cost
+                )
+                continue
+            elif spread_cost > self.max_cost_threshold:
+                spreads_too_expensive += 1
+                logger.debug(
+                    "Spread too expensive",
+                    ticker=ticker,
+                    buy_strike=buy_strike,
+                    sell_strike=sell_strike,
+                    spread_cost=spread_cost,
+                    threshold=self.max_cost_threshold
+                )
+                continue
+            else:
+                metrics = self.calculate_spread_metrics(spread_cost, ticker)
                 
                 spread_info = {
                     "buy_strike": buy_strike,
@@ -195,13 +344,39 @@ class OvernightOptionsAlgorithm:
                 }
                 
                 qualifying_spreads.append(spread_info)
+                
+                logger.debug(
+                    "Qualifying spread found",
+                    ticker=ticker,
+                    buy_strike=buy_strike,
+                    sell_strike=sell_strike,
+                    spread_cost=spread_cost,
+                    roi_potential=metrics.get("roi_potential", 0)
+                )
         
+        # Log comprehensive summary
         logger.info(
-            "Qualifying spreads found",
-            total_spreads_checked=len(sorted_contracts),
+            "Qualifying spreads search completed",
+            ticker=ticker,
+            spread_width=spread_width,
+            total_contracts=len(sorted_contracts),
+            spreads_attempted=spreads_attempted,
+            spreads_with_missing_sell=spreads_with_missing_sell,
+            spreads_with_invalid_cost=spreads_with_invalid_cost,
+            spreads_too_expensive=spreads_too_expensive,
             qualifying_spreads=len(qualifying_spreads),
             max_cost_threshold=self.max_cost_threshold
         )
+        
+        if qualifying_spreads:
+            costs = [s["spread_cost"] for s in qualifying_spreads]
+            logger.info(
+                "Qualifying spread costs",
+                ticker=ticker,
+                min_cost=min(costs),
+                max_cost=max(costs),
+                avg_cost=round(sum(costs) / len(costs), 2)
+            )
         
         return qualifying_spreads
     
@@ -291,8 +466,8 @@ class OvernightOptionsAlgorithm:
                 max_cost_threshold=self.max_cost_threshold
             )
             
-            # Step 1: Get current SPY price
-            current_price = await self.get_current_spy_price()
+            # Step 1: Get current underlying price
+            current_price = await self.get_current_price(ticker)
             
             # Step 2: Get option chain with pricing
             option_chain_data = await self.thetradelist_service.build_option_chain_with_pricing(
@@ -302,14 +477,14 @@ class OvernightOptionsAlgorithm:
             
             contracts = option_chain_data.get("contracts", [])
             if not contracts:
-                logger.warning("No option contracts available for algorithm")
+                logger.warning("No option contracts available for algorithm", ticker=ticker)
                 return self._create_empty_result(ticker, expiration_date, current_price)
             
             # Step 3: Filter for ITM strikes (below current price)
-            itm_contracts = self.filter_itm_strikes(contracts, current_price)
+            itm_contracts = self.filter_itm_strikes(contracts, current_price, ticker)
             
-            # Step 4: Find qualifying $1-wide spreads
-            qualifying_spreads = self.find_qualifying_spreads(itm_contracts)
+            # Step 4: Find qualifying spreads (width varies by ticker)
+            qualifying_spreads = self.find_qualifying_spreads(itm_contracts, ticker)
             
             # Step 5: Select optimal spread (deepest ITM)
             optimal_spread = self.select_optimal_spread(qualifying_spreads)
@@ -344,11 +519,11 @@ class OvernightOptionsAlgorithm:
                     "roi_potential": optimal_spread["roi_potential"] if optimal_spread else None,
                     "profit_target": optimal_spread["profit_target"] if optimal_spread else None,
                     "target_roi": 20.0,  # Fixed 20% target per project requirements
-                    "strategy": f"BUY {optimal_spread['buy_strike']:.0f} / SELL {optimal_spread['sell_strike']:.0f} CALL" if optimal_spread else None,
+                    "strategy": f"BUY {optimal_spread['buy_strike']:.0f} / SELL {optimal_spread['sell_strike']:.0f} CALL ({ticker})" if optimal_spread else None,
                     "expiration": option_chain_data.get("expiration_date"),
                     "qualified_spreads_count": len(qualifying_spreads)
                 },
-                "message": self._get_result_message(optimal_spread, len(qualifying_spreads))
+                "message": self._get_result_message(optimal_spread, len(qualifying_spreads), ticker)
             }
             
             logger.info(
@@ -407,14 +582,16 @@ class OvernightOptionsAlgorithm:
             "message": "No option contracts available for analysis"
         }
     
-    def _get_result_message(self, optimal_spread: Optional[Dict[str, Any]], qualified_count: int) -> str:
+    def _get_result_message(self, optimal_spread: Optional[Dict[str, Any]], qualified_count: int, ticker: str = "SPY") -> str:
         """Get appropriate result message based on algorithm outcome"""
+        spread_description = "$1-wide" if ticker == "SPY" else "$10-wide"
+        
         if optimal_spread:
-            return f"Optimal spread identified: {optimal_spread['buy_strike']}/{optimal_spread['sell_strike']} at ${optimal_spread['spread_cost']} cost"
+            return f"Optimal {spread_description} {ticker} spread: {optimal_spread['buy_strike']}/{optimal_spread['sell_strike']} at ${optimal_spread['spread_cost']} cost"
         elif qualified_count > 0:
-            return f"Found {qualified_count} qualifying spreads but no optimal selection made"
+            return f"Found {qualified_count} qualifying {spread_description} {ticker} spreads but no optimal selection made"
         else:
-            return "No qualifying spreads found within cost threshold"
+            return f"No qualifying {spread_description} {ticker} spreads found within cost threshold"
 
 
 # Singleton pattern

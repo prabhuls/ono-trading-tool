@@ -5,6 +5,7 @@ import { ChartTimeInterval, IntradayChartData, IntradayDataPoint } from '@/types
 import { api } from '@/lib/api';
 
 interface SpyIntradayChartProps {
+  ticker: string; // The ticker symbol (SPY, SPX, etc.)
   buyStrike: number;
   sellStrike: number;
   currentPrice: number;
@@ -15,6 +16,7 @@ interface SpyIntradayChartProps {
 }
 
 export function SpyIntradayChart({ 
+  ticker,
   buyStrike, 
   sellStrike, 
   currentPrice,
@@ -54,7 +56,7 @@ export function SpyIntradayChart({
       setLoading(true);
       setError(null);
       
-      const response = await api.chartData.getIntradayData('SPY', {
+      const response = await api.chartData.getIntradayData(ticker, {
         interval,
         ...(hasAlgorithmResult ? { buy_strike: buyStrike, sell_strike: sellStrike } : {})
       });
@@ -250,7 +252,7 @@ export function SpyIntradayChart({
   // Initial data fetch and redraw on data change
   useEffect(() => {
     fetchChartData(currentActiveInterval);
-  }, [buyStrike, sellStrike, hasAlgorithmResult]); // Refetch when strikes change or algorithm result status changes
+  }, [ticker, buyStrike, sellStrike, hasAlgorithmResult]); // Refetch when ticker or strikes change or algorithm result status changes
 
   useEffect(() => {
     if (chartData) {
@@ -273,7 +275,7 @@ export function SpyIntradayChart({
   return (
     <Card className="p-4" style={{ borderColor: '#616266' }}>
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold text-foreground">SPY Intraday Chart</h3>
+        <h3 className="text-lg font-semibold text-foreground">{ticker} Intraday Chart</h3>
         <div className="flex gap-2">
           {chartIntervals.map((interval) => (
             <Button

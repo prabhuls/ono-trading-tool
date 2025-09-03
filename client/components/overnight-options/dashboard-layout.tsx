@@ -229,6 +229,7 @@ export function DashboardLayout() {
           {/* Main Content */}
           <div className="lg:col-span-8 space-y-6">
             <SpyIntradayChart
+              ticker={activeTicker}
               buyStrike={algorithmResult?.buy_strike || dashboardData.spreadRecommendation.buyStrike}
               sellStrike={algorithmResult?.sell_strike || dashboardData.spreadRecommendation.sellStrike}
               currentPrice={currentSpyPrice}
@@ -238,6 +239,7 @@ export function DashboardLayout() {
               hasAlgorithmResult={algorithmResult !== null && algorithmResult.buy_strike !== null && algorithmResult.sell_strike !== null}
             />
             <OptionChainOptimizer
+              ticker={activeTicker}
               optionChain={optionChainData.length > 0 ? optionChainData : dashboardData.optionChain}
               expiration={dashboardData.spreadRecommendation.expiration}
               isLoading={optionChainLoading}

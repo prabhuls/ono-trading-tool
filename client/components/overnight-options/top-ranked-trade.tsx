@@ -34,7 +34,7 @@ export function TopRankedTrade({
   onTickerChange 
 }: TopRankedTradeProps) {
   const [isMaxCostDialogOpen, setIsMaxCostDialogOpen] = useState(false);
-  const tickers: SupportedTicker[] = ['SPY', 'XSP', 'SPX'];
+  const tickers: SupportedTicker[] = ['SPY', 'SPX'];
   
   // Use real price data from our API
   const { 
