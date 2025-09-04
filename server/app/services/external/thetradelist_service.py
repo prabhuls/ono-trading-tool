@@ -2051,16 +2051,17 @@ class TheTradeListService(ExternalAPIService):
         
         return aggregated_candles
 
-    async def get_spx_chart_data(
+    async def get_isin_chart_data(
         self,
-        interval: str = "1m",
-        period: str = "1d"
+        ticker: str,
+        isin: str,
+        interval: str = "1m"
     ) -> Dict[str, Any]:
         """
-        Get SPX intraday chart data from ISIN-data endpoint with candle aggregation support
+        Get intraday chart data from ISIN-data endpoint with candle aggregation support
         
-        This method fetches SPX intraday data from the ISIN-data endpoint which provides
-        1-minute interval OHLCV data for the S&P 500 index for the current trading day.
+        This method fetches intraday data from the ISIN-data endpoint which provides
+        1-minute interval OHLCV data for the current trading day only (real-time data).
         For 5m and 15m intervals, it aggregates the 1-minute data accordingly.
         
         Supported intervals:
@@ -2069,8 +2070,9 @@ class TheTradeListService(ExternalAPIService):
         - "15m": Aggregates every 15 consecutive 1-minute candles (~26 candles)
         
         Args:
+            ticker: Stock ticker symbol (e.g., "SPY", "SPX")
+            isin: ISIN code for the instrument
             interval: Time interval ("1m", "5m", "15m")
-            period: Time period (only "1d" supported for intraday data)
         
         Returns:
             Dictionary containing aggregated OHLCV data formatted for chart display
@@ -2080,16 +2082,10 @@ class TheTradeListService(ExternalAPIService):
         """
         endpoint = "/v3/data/isin-data"
         
-        # For intraday data, always use current day
-        # The API may require startDate < endDate, so we'll use yesterday as start if needed
-        today = datetime.now().strftime("%Y-%m-%d")
-        yesterday = self._get_previous_trading_day()
-        
-        # Try with same day first, if API requires range, use yesterday to today
+        # For real-time data, use ISIN endpoint without date parameters
+        # This returns only today's current trading day data (no future data)
         params = {
-            "isin": "US78378X1072",  # SPX ISIN
-            "startDate": yesterday,  # Use yesterday to ensure startDate < endDate
-            "endDate": today,
+            "isin": isin,  # Use the provided ISIN
             "type": "intraday"  # Request intraday data for 1-minute intervals
         }
         
@@ -2097,34 +2093,34 @@ class TheTradeListService(ExternalAPIService):
         valid_intervals = {"1m", "5m", "15m"}
         if interval not in valid_intervals:
             logger.warning(
-                f"Invalid interval {interval} for SPX chart data, defaulting to 1m",
+                f"Invalid interval {interval} for {ticker} chart data, defaulting to 1m",
                 valid_intervals=list(valid_intervals)
             )
             interval = "1m"
 
         try:
             logger.info(
-                "Fetching SPX intraday chart data via ISIN-data endpoint",
-                isin="US78378X1072",
-                start_date=yesterday,
-                end_date=today,
+                "Fetching intraday chart data via ISIN-data endpoint",
+                ticker=ticker,
+                isin=isin,
                 type="intraday",
                 interval=interval,
-                requires_aggregation=(interval != "1m")
+                requires_aggregation=(interval != "1m"),
+                real_time_only=True
             )
             
             # Check cache first with interval-specific key for intraday data
-            cache_key = f"spx_intraday_data:{interval}"
+            cache_key = f"{ticker.lower()}_intraday_data:{interval}"
             cached_data = self._get_from_cache(cache_key)
             if cached_data is not None:
-                logger.info("Using cached SPX intraday chart data", interval=interval)
+                logger.info("Using cached intraday chart data", ticker=ticker, interval=interval)
                 return cached_data
             
             # Fetch fresh data from ISIN-data endpoint
             raw_data = await self.get(endpoint, params=params)
             
             # Expected response format for intraday data:
-            # {n: "S&P 500", id: 1000002, isin: "US78378X1072", currency: null, 
+            # {n: "Instrument Name", id: xxxxxx, isin: "ISINxxxxxx", currency: null, 
             #  quotes: [{t: 1756764000, o: 6405.614, h: 6420.653, l: 6364.661, c: 6419.653, v: 4784000000}, ...]}
             # Note: With type:"intraday", we expect many more data points (1-minute intervals)
             
@@ -2211,9 +2207,13 @@ class TheTradeListService(ExternalAPIService):
                     current_price=current_price
                 )
             
-            # If no current price from data, use fallback
+            # If no current price from data, use fallback based on ticker
             if current_price == 0.0:
-                current_price = 6400.0  # SPX fallback price
+                fallback_prices = {
+                    "SPY": 585.0,   # SPY fallback price
+                    "SPX": 6400.0   # SPX fallback price
+                }
+                current_price = fallback_prices.get(ticker, 500.0)  # Default fallback
             
             # Create benchmark lines (current price and placeholder strikes)
             benchmark_lines = {
@@ -2228,11 +2228,12 @@ class TheTradeListService(ExternalAPIService):
                 "last_updated": datetime.utcnow().isoformat() + "Z",
                 "interval": interval,  # Reflects requested interval
                 "period": "1d",  # Always 1d for intraday data
-                "start_date": yesterday,
-                "end_date": today,
                 "data_type": "intraday",
                 "aggregation_applied": (interval != "1m"),
-                "source_resolution": "1m"  # Source data is always 1-minute from API
+                "source_resolution": "1m",  # Source data is always 1-minute from API
+                "real_time_only": True,  # No future data, only current trading day
+                "ticker": ticker,
+                "isin": isin
             }
             
             normalized_data = {
@@ -2248,15 +2249,15 @@ class TheTradeListService(ExternalAPIService):
             self._set_cache(cache_key, normalized_data, ttl=30)
             
             logger.info(
-                "SPX intraday chart data retrieved successfully via ISIN-data",
+                "Intraday chart data retrieved successfully via ISIN-data",
+                ticker=ticker,
                 data_points=len(price_data),
                 current_price=current_price,
                 interval=interval,
-                start_date=yesterday,
-                end_date=today,
                 data_type="intraday",
                 aggregation_applied=(interval != "1m"),
-                source_resolution="1m"
+                source_resolution="1m",
+                real_time_only=True
             )
             
             return normalized_data
@@ -2264,9 +2265,9 @@ class TheTradeListService(ExternalAPIService):
         except ExternalAPIError:
             raise
         except Exception as e:
-            logger.error("Failed to get SPX chart data", error=str(e))
+            logger.error("Failed to get intraday chart data", ticker=ticker, error=str(e))
             raise ExternalAPIError(
-                message=f"Failed to get SPX chart data: {str(e)}",
+                message=f"Failed to get {ticker} chart data: {str(e)}",
                 service=self.service_name
             )
     
@@ -2279,11 +2280,11 @@ class TheTradeListService(ExternalAPIService):
         """
         Get intraday OHLCV data for chart display
         
-        Routes SPX to ISIN quote endpoint which provides daily data only.
-        Uses regular TheTradeList range-data endpoint for SPY and XSP.
+        Routes SPY and SPX to ISIN-data endpoint for real-time data only.
+        Uses regular TheTradeList range-data endpoint for XSP only.
         
         Args:
-            ticker: Stock ticker symbol (e.g., "SPY", "SPX")
+            ticker: Stock ticker symbol (e.g., "SPY", "SPX", "XSP")
             interval: Time interval ("1m", "5m", "15m", "30m", "1h")
             period: Time period ("1d", "5d", "1w")
             
@@ -2303,156 +2304,151 @@ class TheTradeListService(ExternalAPIService):
                 service=self.service_name
             )
         
-        # Route SPX to the ISIN-data endpoint for intraday data
-        if ticker_upper == "SPX":
+        # Define ISIN codes for supported tickers
+        isin_codes = {
+            "SPY": "US78462F1030",  # SPY ISIN
+            "SPX": "US78378X1072"   # SPX ISIN
+        }
+        
+        # Route SPY and SPX to the ISIN-data endpoint for real-time intraday data
+        if ticker_upper in isin_codes:
             logger.info(
-                "Routing SPX to ISIN-data endpoint for intraday chart data",
+                "Routing to ISIN-data endpoint for real-time intraday chart data",
                 ticker=ticker_upper,
+                isin=isin_codes[ticker_upper],
                 requested_interval=interval,
                 requested_period=period,
                 endpoint="isin-data",
-                data_type="intraday"
+                data_type="intraday",
+                real_time_only=True
             )
-            # SPX ISIN-data endpoint provides 1-minute interval data
-            # Pass through the requested interval for metadata
-            spx_data = await self.get_spx_chart_data(interval=interval, period="1d")
-            # Add ticker to the response for consistency
-            spx_data["ticker"] = ticker_upper
-            # The data is actually 1-minute intervals from the intraday endpoint
-            return spx_data
-        
-        # Validate interval - now accepting 2m as well
-        valid_intervals = {"1m", "2m", "5m", "15m", "30m", "1h"}
-        if interval not in valid_intervals:
-            logger.warning(f"Invalid interval {interval}, defaulting to 5m")
-            interval = "5m"
-        
-        # Validate period 
-        valid_periods = {"1d", "5d", "1w"}
-        if period not in valid_periods:
-            logger.warning(f"Invalid period {period}, defaulting to 1d")
-            period = "1d"
-        
-        # Map intervals to TheTradeList API format
-        # NOTE: For SPY/XSP, "1/minute" actually returns 2-minute data from the API
-        interval_mapping = {
-            "1m": "1/minute",  # For SPY/XSP, this returns 2-minute data
-            "2m": "1/minute",  # Explicitly map 2m to same endpoint
-            "5m": "5/minute",
-            "15m": "15/minute", 
-            "30m": "30/minute",
-            "1h": "1/hour"
-        }
-        
-        try:
-            logger.info(
-                "Fetching intraday data",
+            
+            # Use the new generic ISIN endpoint
+            chart_data = await self.get_isin_chart_data(
                 ticker=ticker_upper,
-                interval=interval,
-                period=period
+                isin=isin_codes[ticker_upper],
+                interval=interval
             )
             
-            # Calculate date range based on period using ET timezone
-            try:
-                import pytz
-                et_tz = pytz.timezone('America/New_York')
-                end_date = datetime.now(et_tz).replace(tzinfo=None)  # Remove timezone for API compatibility
-                logger.info(f"Using ET timezone for intraday date range: {end_date}")
-            except ImportError:
-                end_date = datetime.now()
-                logger.warning("pytz not available, using local time for intraday date range")
-                
-            if period == "1d":
-                start_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
-            elif period == "5d":
-                start_date = end_date - timedelta(days=5)
-            elif period == "1w":
-                start_date = end_date - timedelta(weeks=1)
-            else:
-                start_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            # Add ticker to the response for consistency
+            chart_data["ticker"] = ticker_upper
+            return chart_data
+        
+        # Handle XSP using range-data endpoint (only remaining ticker)
+        if ticker_upper == "XSP":
+            # Validate interval for XSP
+            valid_intervals = {"1m", "5m", "15m", "30m", "1h"}
+            if interval not in valid_intervals:
+                logger.warning(f"Invalid interval {interval} for XSP, defaulting to 5m")
+                interval = "5m"
             
-            # Use TheTradeList range-data endpoint for ALL tickers (including SPX)
-            # SPX works directly with this endpoint, no special ISIN handling needed
-            endpoint = "/v1/data/range-data"
-            params = {
-                "ticker": ticker_upper,  # Use SPX ticker directly
-                "range": interval_mapping[interval],
-                "startdate": start_date.strftime("%Y-%m-%d"),
-                "enddate": end_date.strftime("%Y-%m-%d"),
-                "limit": 200  # Reasonable limit for intraday data
+            # Validate period for XSP
+            valid_periods = {"1d", "5d", "1w"}
+            if period not in valid_periods:
+                logger.warning(f"Invalid period {period} for XSP, defaulting to 1d")
+                period = "1d"
+            
+            # Map intervals to TheTradeList API format
+            interval_mapping = {
+                "1m": "1/minute",
+                "5m": "5/minute",
+                "15m": "15/minute", 
+                "30m": "30/minute",
+                "1h": "1/hour"
             }
             
-            logger.info(
-                "Using range-data endpoint for intraday data",
-                ticker=ticker_upper,
-                endpoint=endpoint,
-                params=params
-            )
-            
-            # Use caching for intraday data (1-2 minutes)
-            cache_key = f"intraday_data:{ticker_upper}:{interval}:{period}"
-            cached_data = self._get_from_cache(cache_key)
-            if cached_data is not None:
-                logger.info("Using cached intraday data", ticker=ticker_upper, interval=interval, period=period)
-                return cached_data
-            
-            # Fetch fresh data from range-data endpoint
-            # NOTE: SPX works directly with this endpoint, no ISIN routing needed
-            logger.info(
-                "Fetching intraday data from TheTradeList",
-                ticker=ticker_upper,
-                endpoint=endpoint,
-                using_isin=False,  # SPX uses regular endpoint for chart data
-                data_type="time_series"
-            )
-            
-            raw_data = await self.get(endpoint, params=params)
-            
-            # Normalize the response
-            # For SPY/XSP with 1m or 2m interval, ensure we label it correctly as 2m
-            effective_interval = interval
-            if ticker_upper in {"SPY", "XSP"} and interval in {"1m", "2m"}:
-                effective_interval = "2m"  # API returns 2-minute data for these
+            try:
                 logger.info(
-                    "Adjusting interval for SPY/XSP to reflect actual data granularity",
+                    "Fetching XSP intraday data using range-data endpoint",
                     ticker=ticker_upper,
-                    requested_interval=interval,
-                    effective_interval=effective_interval,
-                    reason="API returns 2-minute data for '1/minute' requests"
+                    interval=interval,
+                    period=period
                 )
-            
-            normalized_data = self._normalize_intraday_data(raw_data, ticker_upper, effective_interval, period)
-            
-            # Cache the result for 90 seconds
-            self._set_cache(cache_key, normalized_data, ttl=90)
-            
-            logger.info(
-                "Intraday data retrieved successfully",
-                ticker=ticker_upper,
-                interval=interval,
-                period=period,
-                data_points=len(normalized_data.get("price_data", [])),
-                endpoint_used=endpoint,
-                data_source="range_data_endpoint"
-            )
-            
-            return normalized_data
-            
-        except ExternalAPIError:
-            # Re-raise API errors
-            raise
-        except Exception as e:
-            logger.error(
-                "Failed to get intraday data",
-                ticker=ticker,
-                interval=interval,
-                period=period,
-                error=str(e)
-            )
-            raise ExternalAPIError(
-                message=f"Failed to get intraday data for {ticker}: {str(e)}",
-                service=self.service_name
-            )
+                
+                # Calculate date range based on period using ET timezone
+                try:
+                    import pytz
+                    et_tz = pytz.timezone('America/New_York')
+                    end_date = datetime.now(et_tz).replace(tzinfo=None)
+                    logger.info(f"Using ET timezone for XSP intraday date range: {end_date}")
+                except ImportError:
+                    end_date = datetime.now()
+                    logger.warning("pytz not available, using local time for XSP intraday date range")
+                    
+                if period == "1d":
+                    start_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
+                elif period == "5d":
+                    start_date = end_date - timedelta(days=5)
+                elif period == "1w":
+                    start_date = end_date - timedelta(weeks=1)
+                else:
+                    start_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
+                
+                # Use TheTradeList range-data endpoint for XSP
+                endpoint = "/v1/data/range-data"
+                params = {
+                    "ticker": ticker_upper,
+                    "range": interval_mapping[interval],
+                    "startdate": start_date.strftime("%Y-%m-%d"),
+                    "enddate": end_date.strftime("%Y-%m-%d"),
+                    "limit": 200
+                }
+                
+                # Use caching for intraday data
+                cache_key = f"intraday_data:{ticker_upper}:{interval}:{period}"
+                cached_data = self._get_from_cache(cache_key)
+                if cached_data is not None:
+                    logger.info("Using cached XSP intraday data", ticker=ticker_upper, interval=interval, period=period)
+                    return cached_data
+                
+                # Fetch fresh data from range-data endpoint
+                logger.info(
+                    "Fetching XSP intraday data from TheTradeList range-data endpoint",
+                    ticker=ticker_upper,
+                    endpoint=endpoint,
+                    data_type="time_series"
+                )
+                
+                raw_data = await self.get(endpoint, params=params)
+                
+                # Normalize the response
+                normalized_data = self._normalize_intraday_data(raw_data, ticker_upper, interval, period)
+                
+                # Cache the result for 90 seconds
+                self._set_cache(cache_key, normalized_data, ttl=90)
+                
+                logger.info(
+                    "XSP intraday data retrieved successfully",
+                    ticker=ticker_upper,
+                    interval=interval,
+                    period=period,
+                    data_points=len(normalized_data.get("price_data", [])),
+                    endpoint_used=endpoint,
+                    data_source="range_data_endpoint"
+                )
+                
+                return normalized_data
+                
+            except ExternalAPIError:
+                raise
+            except Exception as e:
+                logger.error(
+                    "Failed to get XSP intraday data",
+                    ticker=ticker,
+                    interval=interval,
+                    period=period,
+                    error=str(e)
+                )
+                raise ExternalAPIError(
+                    message=f"Failed to get XSP intraday data: {str(e)}",
+                    service=self.service_name
+                )
+        
+        # This should not happen as we validate supported tickers above
+        raise ExternalAPIError(
+            message=f"Unsupported ticker {ticker_upper} reached end of method",
+            service=self.service_name
+        )
     
     def _normalize_intraday_data(
         self,
@@ -2464,13 +2460,13 @@ class TheTradeListService(ExternalAPIService):
         """
         Normalize TheTradeList range-data response for intraday chart display
         
-        Note: For SPY/XSP, the API returns 2-minute data when requesting "1/minute".
-        The interval parameter should already be adjusted to "2m" for SPY/XSP.
+        This method is now only used for XSP ticker. SPY and SPX use the ISIN-data 
+        endpoint with different normalization logic in get_isin_chart_data().
         
         Args:
-            raw_data: Raw API response from TheTradeList
-            ticker: Stock ticker symbol
-            interval: Time interval (already adjusted to "2m" for SPY/XSP when appropriate)
+            raw_data: Raw API response from TheTradeList range-data endpoint
+            ticker: Stock ticker symbol (should be "XSP")
+            interval: Time interval
             period: Time period
             
         Returns:
@@ -2543,7 +2539,7 @@ class TheTradeListService(ExternalAPIService):
                 "total_candles": len(price_data),
                 "market_hours": "09:30-16:00 ET",
                 "last_updated": datetime.utcnow().isoformat() + "Z",
-                "interval": interval  # This should already be "2m" for SPY/XSP when appropriate
+                "interval": interval
             }
             
             normalized = {

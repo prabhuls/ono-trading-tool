@@ -29,28 +29,17 @@ const getDefaultMaxCost = (ticker: string): number => {
   }
 };
 
-// Helper function to get chart intervals based on ticker
-const getChartIntervalsForTicker = (ticker: string) => {
-  // SPY and XSP use 2m instead of 1m (backend labels SPY's 1m data as 2m)
-  if (ticker === 'SPY' || ticker === 'XSP') {
-    return [
-      { label: '2min', value: '2m', isActive: false },
-      { label: '5min', value: '5m', isActive: true },
-      { label: '15min', value: '15m', isActive: false },
-    ];
-  }
-  // SPX uses 1m
-  return [
-    { label: '1min', value: '1m', isActive: false },
-    { label: '5min', value: '5m', isActive: true },
-    { label: '15min', value: '15m', isActive: false },
-  ];
-};
+// Standard chart intervals for all tickers (SPY and SPX both use true 1m data now)
+const standardChartIntervals = [
+  { label: '1min', value: '1m', isActive: false },
+  { label: '5min', value: '5m', isActive: true },
+  { label: '15min', value: '15m', isActive: false },
+];
 
 export function DashboardLayout() {
   const [dashboardData, setDashboardData] = useState({
     ...mockDashboardData,
-    chartIntervals: getChartIntervalsForTicker('SPY') // Initialize with SPY intervals
+    chartIntervals: standardChartIntervals // Initialize with standard intervals
   });
   const [activeTicker, setActiveTicker] = useState('SPY');
   const [isLoading, setIsLoading] = useState(false); // Don't block initial render
@@ -217,11 +206,7 @@ export function DashboardLayout() {
       // Update the active ticker
       setActiveTicker(ticker);
       
-      // Update chart intervals based on ticker
-      setDashboardData(prev => ({
-        ...prev,
-        chartIntervals: getChartIntervalsForTicker(ticker)
-      }));
+      // Both SPY and SPX use the same intervals now - no need to update chartIntervals
       
       // Update max cost to ticker-specific default
       const newMaxCost = getDefaultMaxCost(ticker);
