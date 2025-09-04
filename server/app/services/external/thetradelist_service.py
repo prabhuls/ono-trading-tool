@@ -2321,8 +2321,8 @@ class TheTradeListService(ExternalAPIService):
             # The data is actually 1-minute intervals from the intraday endpoint
             return spx_data
         
-        # Validate interval
-        valid_intervals = {"1m", "5m", "15m", "30m", "1h"}
+        # Validate interval - now accepting 2m as well
+        valid_intervals = {"1m", "2m", "5m", "15m", "30m", "1h"}
         if interval not in valid_intervals:
             logger.warning(f"Invalid interval {interval}, defaulting to 5m")
             interval = "5m"
@@ -2334,8 +2334,10 @@ class TheTradeListService(ExternalAPIService):
             period = "1d"
         
         # Map intervals to TheTradeList API format
+        # NOTE: For SPY/XSP, "1/minute" actually returns 2-minute data from the API
         interval_mapping = {
-            "1m": "1/minute",
+            "1m": "1/minute",  # For SPY/XSP, this returns 2-minute data
+            "2m": "1/minute",  # Explicitly map 2m to same endpoint
             "5m": "5/minute",
             "15m": "15/minute", 
             "30m": "30/minute",
@@ -2407,7 +2409,19 @@ class TheTradeListService(ExternalAPIService):
             raw_data = await self.get(endpoint, params=params)
             
             # Normalize the response
-            normalized_data = self._normalize_intraday_data(raw_data, ticker_upper, interval, period)
+            # For SPY/XSP with 1m or 2m interval, ensure we label it correctly as 2m
+            effective_interval = interval
+            if ticker_upper in {"SPY", "XSP"} and interval in {"1m", "2m"}:
+                effective_interval = "2m"  # API returns 2-minute data for these
+                logger.info(
+                    "Adjusting interval for SPY/XSP to reflect actual data granularity",
+                    ticker=ticker_upper,
+                    requested_interval=interval,
+                    effective_interval=effective_interval,
+                    reason="API returns 2-minute data for '1/minute' requests"
+                )
+            
+            normalized_data = self._normalize_intraday_data(raw_data, ticker_upper, effective_interval, period)
             
             # Cache the result for 90 seconds
             self._set_cache(cache_key, normalized_data, ttl=90)
@@ -2450,10 +2464,13 @@ class TheTradeListService(ExternalAPIService):
         """
         Normalize TheTradeList range-data response for intraday chart display
         
+        Note: For SPY/XSP, the API returns 2-minute data when requesting "1/minute".
+        The interval parameter should already be adjusted to "2m" for SPY/XSP.
+        
         Args:
             raw_data: Raw API response from TheTradeList
             ticker: Stock ticker symbol
-            interval: Time interval
+            interval: Time interval (already adjusted to "2m" for SPY/XSP when appropriate)
             period: Time period
             
         Returns:
@@ -2521,10 +2538,12 @@ class TheTradeListService(ExternalAPIService):
             }
             
             # Create metadata
+            # Ensure interval reflects actual data granularity
             metadata = {
                 "total_candles": len(price_data),
                 "market_hours": "09:30-16:00 ET",
-                "last_updated": datetime.utcnow().isoformat() + "Z"
+                "last_updated": datetime.utcnow().isoformat() + "Z",
+                "interval": interval  # This should already be "2m" for SPY/XSP when appropriate
             }
             
             normalized = {

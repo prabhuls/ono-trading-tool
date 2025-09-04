@@ -512,7 +512,7 @@ async def get_spy_price(
 @capture_errors(level="error")
 async def get_intraday_chart_data(
     ticker: str = Path(..., description="Stock ticker symbol (SPY, XSP, SPX)", regex="^(SPY|XSP|SPX)$"),
-    interval: str = Query("5m", description="Time interval", regex="^(1m|5m|15m|30m|1h)$"),
+    interval: str = Query("5m", description="Time interval (1m returns 2m data for SPY/XSP)", regex="^(1m|2m|5m|15m|30m|1h)$"),
     period: str = Query("1d", description="Time period", regex="^(1d|5d|1w)$"),
     buy_strike: Optional[float] = Query(None, description="Buy strike price for benchmark line", ge=0),
     sell_strike: Optional[float] = Query(None, description="Sell strike price for benchmark line", ge=0),
@@ -527,7 +527,10 @@ async def get_intraday_chart_data(
     - Optional benchmark strike lines
     - Market hours metadata
     
-    Supports different time intervals (1m, 5m, 15m, 30m, 1h) and periods (1d, 5d, 1w).
+    Supports different time intervals (1m, 2m, 5m, 15m, 30m, 1h) and periods (1d, 5d, 1w).
+    
+    Note: For SPY/XSP, requesting "1m" or "2m" intervals both return 2-minute data from the API.
+    SPX has true 1-minute data available.
     Data is cached for 60-120 seconds for real-time feel while managing API limits.
     
     Args:

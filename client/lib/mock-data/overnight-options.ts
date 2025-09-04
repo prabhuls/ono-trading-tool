@@ -47,8 +47,8 @@ export const mockDashboardData: DashboardData = {
     { strike: 595, bid: 0.01, ask: 0.19, volume: 21, openInterest: 34, impliedVolatility: 24.2 },
   ],
   chartIntervals: [
-    { label: '1min', value: '1m', isActive: true },
-    { label: '5min', value: '5m', isActive: false },
+    { label: '2min', value: '2m', isActive: false },
+    { label: '5min', value: '5m', isActive: true },
     { label: '15min', value: '15m', isActive: false },
   ],
   isLive: true,
