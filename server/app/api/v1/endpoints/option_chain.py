@@ -72,8 +72,8 @@ async def get_option_chain(
         regex="^\\d{4}-\\d{2}-\\d{2}$"
     ),
     max_cost: Optional[float] = Query(
-        0.74,
-        description="Maximum spread cost threshold (default: $0.74). SPY: $0.50-$2.00 for $1-wide spreads, SPX: $5.00-$50.00 for $10-wide spreads",
+        None,
+        description="Maximum spread cost threshold. SPY default: $0.74, SPX default: $3.75. SPY range: $0.50-$2.00, SPX range: $3.00-$20.00",
         ge=0.01,
         le=50.00
     ),
@@ -94,13 +94,13 @@ async def get_option_chain(
     **Time Window**: Optimized for 3:00-4:00 PM ET trading window
     
     **Spread Cost Ranges**:
-    - SPY: Typically $0.50-$2.00 for $1-wide spreads
-    - SPX: Typically $5.00-$50.00 for $10-wide spreads (proportional to ~10x price scale)
+    - SPY: Default $0.74, typical range $0.50-$2.00 for $1-wide spreads
+    - SPX: Default $3.75, typical range $3.00-$20.00 for $10-wide spreads
     
     Args:
         ticker: Stock ticker (supports SPY and SPX)
         expiration_date: Option expiration date (optional, defaults to next trading day)
-        max_cost: Maximum spread cost threshold in dollars (default: $0.74)
+        max_cost: Maximum spread cost threshold in dollars (defaults vary by ticker)
         
     Returns:
         JSONResponse with option chain data and algorithm results
@@ -109,6 +109,10 @@ async def get_option_chain(
         HTTPException: 400 for validation errors, 503 for API unavailable, 500 for server errors
     """
     try:
+        # Apply ticker-specific default max_cost if not provided
+        if max_cost is None:
+            max_cost = 3.75 if ticker.upper() == "SPX" else 0.74
+            
         logger.info(
             "Fetching option chain with algorithm",
             ticker=ticker.upper(),

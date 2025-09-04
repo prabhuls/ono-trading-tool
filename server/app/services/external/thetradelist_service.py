@@ -1424,15 +1424,23 @@ class TheTradeListService(ExternalAPIService):
             
             # Use ET timezone for comparison since market data is in ET
             try:
-                import pytz
-                et_tz = pytz.timezone('America/New_York')
+                from zoneinfo import ZoneInfo
+                et_tz = ZoneInfo('America/New_York')
                 today_et = datetime.now(et_tz).strftime('%Y-%m-%d')
                 today = today_et
                 logger.info(f"Using ET timezone for date comparison: {today_et}")
             except ImportError:
-                # Fallback if pytz not available
-                today = datetime.now().strftime('%Y-%m-%d')
-                logger.warning("pytz not available, using local time for comparison")
+                # Fallback if zoneinfo not available (Python < 3.9)
+                try:
+                    import pytz
+                    et_tz = pytz.timezone('America/New_York')
+                    today_et = datetime.now(et_tz).strftime('%Y-%m-%d')
+                    today = today_et
+                    logger.info(f"Using ET timezone via pytz for date comparison: {today_et}")
+                except ImportError:
+                    # Ultimate fallback if no timezone library available
+                    today = datetime.now().strftime('%Y-%m-%d')
+                    logger.warning("No timezone library available, using local time for comparison")
             
             # Different logic for SPY vs SPX
             if ticker == "SPY":
@@ -1485,25 +1493,43 @@ class TheTradeListService(ExternalAPIService):
     def _calculate_next_trading_day(self) -> str:
         """
         Fallback method to calculate next trading day when API lookup fails
+        Uses Eastern Time for market hours consideration
         
         Returns:
             Next trading day date in YYYY-MM-DD format
         """
         try:
-            today = datetime.now()
-            next_day = today + timedelta(days=1)
+            from zoneinfo import ZoneInfo
+            
+            # Use Eastern Time for market hours
+            et_tz = ZoneInfo('America/New_York')
+            et_now = datetime.now(et_tz)
+            
+            # For options, we always want the NEXT trading day, not today
+            # This ensures we get the proper expiration for overnight trading
+            next_trading_day = et_now.date() + timedelta(days=1)
             
             # Skip weekends
-            while next_day.weekday() > 4:  # 5=Saturday, 6=Sunday
-                next_day = next_day + timedelta(days=1)
+            while next_trading_day.weekday() > 4:  # 5=Saturday, 6=Sunday
+                next_trading_day = next_trading_day + timedelta(days=1)
             
-            return next_day.strftime("%Y-%m-%d")
+            return next_trading_day.strftime("%Y-%m-%d")
             
         except Exception as e:
             logger.error("Failed to calculate fallback trading day", error=str(e))
-            # Ultimate fallback to tomorrow
-            tomorrow = datetime.now() + timedelta(days=1)
-            return tomorrow.strftime("%Y-%m-%d")
+            # Ultimate fallback using ET
+            try:
+                from zoneinfo import ZoneInfo
+                et_now = datetime.now(ZoneInfo('America/New_York'))
+                tomorrow = et_now.date() + timedelta(days=1)
+                # Skip to Monday if tomorrow is weekend
+                while tomorrow.weekday() > 4:
+                    tomorrow = tomorrow + timedelta(days=1)
+                return tomorrow.strftime("%Y-%m-%d")
+            except:
+                # Final fallback if timezone fails
+                tomorrow = datetime.now() + timedelta(days=1)
+                return tomorrow.strftime("%Y-%m-%d")
 
     async def build_option_chain_with_pricing(
         self,

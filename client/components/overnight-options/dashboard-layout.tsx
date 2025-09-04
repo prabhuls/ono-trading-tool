@@ -21,9 +21,9 @@ import type {
 const getDefaultMaxCost = (ticker: string): number => {
   switch (ticker) {
     case 'SPY':
-      return 0.74; // Default for SPY
+      return 0.74; // Default for SPY ($1-wide spreads)
     case 'SPX':
-      return 20.0; // Higher default for SPX options (typically 10-20x more expensive)
+      return 3.75; // Default for SPX ($10-wide spreads, scaled proportionally)
     default:
       return 0.74;
   }

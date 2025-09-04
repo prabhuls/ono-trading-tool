@@ -66,10 +66,10 @@ class OvernightOptionsAlgorithm:
     
     def calculate_spread_cost(self, buy_option: Dict[str, Any], sell_option: Dict[str, Any], ticker: str = "SPY") -> float:
         """
-        Calculate the mid-price cost of a spread
+        Calculate the actual cost of a spread
         
         SPY: $1-wide spreads, SPX: $10-wide spreads (scaled appropriately)
-        Formula: (Buy Ask - Sell Bid) / 2
+        Formula: Buy Ask - Sell Bid (the actual debit paid)
         
         Args:
             buy_option: Lower strike option to buy (more expensive)
@@ -83,8 +83,8 @@ class OvernightOptionsAlgorithm:
             buy_ask = float(buy_option.get("ask", 0))
             sell_bid = float(sell_option.get("bid", 0))
             
-            # Mid-price calculation
-            spread_cost = (buy_ask - sell_bid) / 2
+            # Calculate actual spread cost (debit paid)
+            spread_cost = buy_ask - sell_bid
             
             # Ensure cost is not negative
             return max(0.0, spread_cost)
