@@ -206,6 +206,12 @@ export function DashboardLayout() {
       // Update the active ticker
       setActiveTicker(ticker);
       
+      // Immediately clear algorithm result to remove old strikes
+      setAlgorithmResult(null);
+      
+      // Reset current price to avoid showing old ticker's price with new ticker's name
+      setCurrentSpyPrice(0); // Will be updated when new data loads
+      
       // Both SPY and SPX use the same intervals now - no need to update chartIntervals
       
       // Update max cost to ticker-specific default
