@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 from app.core.logging import get_logger
+from app.core.config import get_settings
 from app.services.exceptions import TimeCalculationError, DSTCalculationError, SessionCalculationError
 
 
@@ -197,6 +198,9 @@ class MarketStatusService:
             Exception: If any calculation fails
         """
         try:
+            # Get settings for trading window bypass
+            settings = get_settings()
+            
             # Get current UTC time
             current_utc = datetime.utcnow()
             
@@ -204,7 +208,12 @@ class MarketStatusService:
             current_et = MarketStatusService.get_eastern_time(current_utc)
             
             # Check if session is currently active
-            is_live = MarketStatusService.is_session_active(current_et)
+            # If bypass is enabled, always show as live
+            if settings.bypass_trading_window:
+                is_live = True
+                logger.info("Trading window bypassed - showing as live", bypass_enabled=True)
+            else:
+                is_live = MarketStatusService.is_session_active(current_et)
             
             # Calculate session start/end times for today in ET
             session_start_et = current_et.replace(

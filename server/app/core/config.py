@@ -160,6 +160,14 @@ class Settings(BaseSettings):
     # Authentication
     enable_auth: bool = Field(default=True, validation_alias="ENABLE_AUTH")
     
+    # Trading Window Control - Single source of truth
+    show_scans_outside_active_hours: bool = Field(default=False, validation_alias="SHOW_SCANS_OUTSIDE_ACTIVE_HOURS")
+    
+    # Deprecated trading window variables (kept for backward compatibility)
+    deprecated_disable_trading_window: Optional[bool] = Field(default=None, validation_alias="DISABLE_TRADING_WINDOW")
+    deprecated_force_trading_window_active: Optional[bool] = Field(default=None, validation_alias="FORCE_TRADING_WINDOW_ACTIVE")
+    deprecated_enable_real_data_testing: Optional[bool] = Field(default=None, validation_alias="ENABLE_REAL_DATA_TESTING")
+    
     # Feature Flags
     features: Dict[str, bool] = {
         "enable_websockets": True,
@@ -283,6 +291,33 @@ class Settings(BaseSettings):
     def is_testing(self) -> bool:
         """Check if running in test environment"""
         return self.environment == "testing"
+    
+    @property
+    def bypass_trading_window(self) -> bool:
+        """
+        Single source of truth for bypassing trading window restrictions.
+        
+        Checks the main flag first, then falls back to deprecated variables
+        for backward compatibility. Issues warnings for deprecated usage.
+        """
+        # Primary flag - the new single source of truth
+        if self.show_scans_outside_active_hours:
+            return True
+            
+        # Backward compatibility checks with warnings
+        if self.deprecated_disable_trading_window is True:
+            print("WARNING: DISABLE_TRADING_WINDOW is deprecated. Use SHOW_SCANS_OUTSIDE_ACTIVE_HOURS instead.")
+            return True
+            
+        if self.deprecated_force_trading_window_active is True:
+            print("WARNING: FORCE_TRADING_WINDOW_ACTIVE is deprecated. Use SHOW_SCANS_OUTSIDE_ACTIVE_HOURS instead.")
+            return True
+            
+        if self.deprecated_enable_real_data_testing is True:
+            print("WARNING: ENABLE_REAL_DATA_TESTING is deprecated. Use SHOW_SCANS_OUTSIDE_ACTIVE_HOURS instead.")
+            return True
+            
+        return False
     
     def get_external_api_config(self, service_name: str) -> Dict[str, Any]:
         """Get configuration for external API service"""
