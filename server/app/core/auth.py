@@ -10,14 +10,37 @@ from app.core.security import verify_jwt_token, extract_token_from_header, JWTPa
 from app.core.logging import get_logger
 from app.core.database import get_db
 from app.core.config import settings
-from app.models.user import User
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+
+# Only import User model if database is enabled
+if settings.enable_database:
+    from app.models.user import User
+else:
+    # Dummy User class for type hints when database is disabled
+    class User:
+        pass
 
 logger = get_logger(__name__)
 
 # Security scheme for Swagger UI
 security = HTTPBearer(auto_error=False)
+
+
+async def get_optional_db():
+    """
+    Optional database dependency - returns None if database is disabled
+    
+    Returns:
+        Database session if enabled, None otherwise
+    """
+    if not settings.enable_database:
+        yield None
+        return
+    
+    # Use the standard get_db dependency when database is enabled
+    async for db in get_db():
+        yield db
 
 
 async def get_current_token(
@@ -343,21 +366,27 @@ def require_scopes(*scopes: str) -> Callable:
 # Dependency for use in path operations
 async def optional_user(
     jwt_payload: Optional[JWTPayload] = Depends(get_current_user_jwt),
-    db: AsyncSession = Depends(get_db)
+    db: Optional[AsyncSession] = Depends(get_optional_db)
 ) -> Optional[User]:
     """
     Optional user dependency - doesn't raise exception if not authenticated
+    Works with or without database enabled.
     
     Args:
         jwt_payload: JWT payload if authenticated
-        db: Database session
+        db: Database session (None if database is disabled)
         
     Returns:
-        User object if authenticated, None otherwise
+        User object if authenticated and database enabled, None otherwise
     """
     if not jwt_payload:
         return None
     
+    # If database is disabled, we can't look up the user
+    if not db or not settings.enable_database:
+        return None
+    
+    # Database lookup only when database is enabled
     result = await db.execute(
         select(User).where(User.external_auth_id == jwt_payload.user_id)
     )
