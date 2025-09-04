@@ -1931,6 +1931,345 @@ class TheTradeListService(ExternalAPIService):
                 service=self.service_name
             )
 
+    def _aggregate_candles(
+        self,
+        candles: List[Dict[str, Any]],
+        interval: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Aggregate 1-minute candles into specified intervals
+        
+        Args:
+            candles: List of 1-minute OHLCV candles (sorted chronologically)
+            interval: Target interval ("1m", "5m", "15m")
+            
+        Returns:
+            List of aggregated candles with proper OHLCV values
+        """
+        if not candles or interval == "1m":
+            return candles
+        
+        # Determine aggregation factor
+        if interval == "5m":
+            group_size = 5
+        elif interval == "15m":
+            group_size = 15
+        else:
+            logger.warning(f"Unsupported interval {interval}, returning 1m data")
+            return candles
+        
+        logger.info(
+            "Aggregating candles",
+            original_count=len(candles),
+            interval=interval,
+            group_size=group_size
+        )
+        
+        aggregated_candles = []
+        
+        # Group candles by the specified interval
+        for i in range(0, len(candles), group_size):
+            group = candles[i:i + group_size]
+            
+            if not group:
+                continue
+            
+            # Skip incomplete groups at the end if they have less than half the expected size
+            # This helps avoid partial intervals that might be misleading
+            if len(group) < max(1, group_size // 2):
+                logger.debug(f"Skipping incomplete group of {len(group)} candles")
+                continue
+            
+            try:
+                # Extract OHLCV values with null safety
+                opens = []
+                highs = []
+                lows = []
+                closes = []
+                volumes = []
+                
+                for candle in group:
+                    if not isinstance(candle, dict):
+                        continue
+                    
+                    # Safely extract numeric values
+                    try:
+                        open_val = float(candle.get("open", 0))
+                        high_val = float(candle.get("high", 0))
+                        low_val = float(candle.get("low", 0))
+                        close_val = float(candle.get("close", 0))
+                        volume_val = int(candle.get("volume", 0))
+                        
+                        # Only include valid candles (non-zero OHLC)
+                        if all([open_val, high_val, low_val, close_val]):
+                            opens.append(open_val)
+                            highs.append(high_val)
+                            lows.append(low_val)
+                            closes.append(close_val)
+                            volumes.append(volume_val)
+                            
+                    except (ValueError, TypeError) as e:
+                        logger.debug(f"Skipping invalid candle data: {e}")
+                        continue
+                
+                # Skip group if no valid candles found
+                if not opens:
+                    logger.debug(f"No valid candles in group starting at index {i}")
+                    continue
+                
+                # Aggregate according to OHLCV rules:
+                # - Open: First candle's open
+                # - High: Maximum high in the group  
+                # - Low: Minimum low in the group
+                # - Close: Last candle's close
+                # - Volume: Sum of all volumes
+                # - Timestamp: Use first candle's timestamp
+                aggregated_candle = {
+                    "timestamp": group[0]["timestamp"],  # First candle's timestamp
+                    "open": opens[0],                    # First open
+                    "high": max(highs),                  # Maximum high
+                    "low": min(lows),                    # Minimum low
+                    "close": closes[-1],                 # Last close
+                    "volume": sum(volumes)               # Sum of volumes
+                }
+                
+                aggregated_candles.append(aggregated_candle)
+                
+            except Exception as e:
+                logger.warning(
+                    f"Failed to aggregate candle group at index {i}: {str(e)}"
+                )
+                continue
+        
+        logger.info(
+            "Candle aggregation completed",
+            original_count=len(candles),
+            aggregated_count=len(aggregated_candles),
+            interval=interval,
+            group_size=group_size
+        )
+        
+        return aggregated_candles
+
+    async def get_spx_chart_data(
+        self,
+        interval: str = "1m",
+        period: str = "1d"
+    ) -> Dict[str, Any]:
+        """
+        Get SPX intraday chart data from ISIN-data endpoint with candle aggregation support
+        
+        This method fetches SPX intraday data from the ISIN-data endpoint which provides
+        1-minute interval OHLCV data for the S&P 500 index for the current trading day.
+        For 5m and 15m intervals, it aggregates the 1-minute data accordingly.
+        
+        Supported intervals:
+        - "1m": Returns 1-minute candles as-is (~394 candles)
+        - "5m": Aggregates every 5 consecutive 1-minute candles (~79 candles) 
+        - "15m": Aggregates every 15 consecutive 1-minute candles (~26 candles)
+        
+        Args:
+            interval: Time interval ("1m", "5m", "15m")
+            period: Time period (only "1d" supported for intraday data)
+        
+        Returns:
+            Dictionary containing aggregated OHLCV data formatted for chart display
+            
+        Raises:
+            ExternalAPIError: On API errors or data processing failures
+        """
+        endpoint = "/v3/data/isin-data"
+        
+        # For intraday data, always use current day
+        # The API may require startDate < endDate, so we'll use yesterday as start if needed
+        today = datetime.now().strftime("%Y-%m-%d")
+        yesterday = self._get_previous_trading_day()
+        
+        # Try with same day first, if API requires range, use yesterday to today
+        params = {
+            "isin": "US78378X1072",  # SPX ISIN
+            "startDate": yesterday,  # Use yesterday to ensure startDate < endDate
+            "endDate": today,
+            "type": "intraday"  # Request intraday data for 1-minute intervals
+        }
+        
+        # Validate interval - only support 1m, 5m, 15m
+        valid_intervals = {"1m", "5m", "15m"}
+        if interval not in valid_intervals:
+            logger.warning(
+                f"Invalid interval {interval} for SPX chart data, defaulting to 1m",
+                valid_intervals=list(valid_intervals)
+            )
+            interval = "1m"
+
+        try:
+            logger.info(
+                "Fetching SPX intraday chart data via ISIN-data endpoint",
+                isin="US78378X1072",
+                start_date=yesterday,
+                end_date=today,
+                type="intraday",
+                interval=interval,
+                requires_aggregation=(interval != "1m")
+            )
+            
+            # Check cache first with interval-specific key for intraday data
+            cache_key = f"spx_intraday_data:{interval}"
+            cached_data = self._get_from_cache(cache_key)
+            if cached_data is not None:
+                logger.info("Using cached SPX intraday chart data", interval=interval)
+                return cached_data
+            
+            # Fetch fresh data from ISIN-data endpoint
+            raw_data = await self.get(endpoint, params=params)
+            
+            # Expected response format for intraday data:
+            # {n: "S&P 500", id: 1000002, isin: "US78378X1072", currency: null, 
+            #  quotes: [{t: 1756764000, o: 6405.614, h: 6420.653, l: 6364.661, c: 6419.653, v: 4784000000}, ...]}
+            # Note: With type:"intraday", we expect many more data points (1-minute intervals)
+            
+            price_data = []
+            current_price = 0.0
+            
+            # Extract quotes array
+            quotes = raw_data.get("quotes", [])
+            if not isinstance(quotes, list):
+                quotes = []
+            
+            for quote in quotes:
+                if not isinstance(quote, dict):
+                    continue
+                
+                # Extract OHLCV data
+                timestamp_raw = quote.get("t")
+                if timestamp_raw:
+                    # Handle both Unix timestamp and ISO string formats
+                    try:
+                        if isinstance(timestamp_raw, str):
+                            # It's already an ISO string, use it directly
+                            if "T" in timestamp_raw:  # ISO format check
+                                timestamp = timestamp_raw
+                            else:
+                                # Try to parse as Unix timestamp string
+                                timestamp_seconds = int(timestamp_raw)
+                                timestamp = datetime.fromtimestamp(timestamp_seconds).isoformat() + "Z"
+                        else:
+                            # Numeric timestamp (int or float)
+                            timestamp = datetime.fromtimestamp(timestamp_raw).isoformat() + "Z"
+                    except (ValueError, TypeError):
+                        continue
+                else:
+                    continue
+                
+                open_price = float(quote.get("o", 0))
+                high_price = float(quote.get("h", 0))
+                low_price = float(quote.get("l", 0))
+                close_price = float(quote.get("c", 0))
+                # Volume may not be available for intraday data
+                volume = int(quote.get("v", 0)) if "v" in quote else 0
+                
+                # Skip invalid bars (volume is optional)
+                if not all([open_price, high_price, low_price, close_price]):
+                    continue
+                
+                price_point = {
+                    "timestamp": timestamp,
+                    "open": open_price,
+                    "high": high_price,
+                    "low": low_price,
+                    "close": close_price,
+                    "volume": volume
+                }
+                
+                price_data.append(price_point)
+                current_price = close_price  # Use most recent close as current price
+            
+            # Sort by timestamp to ensure chronological order
+            price_data.sort(key=lambda x: x["timestamp"])
+            
+            logger.info(
+                "Raw 1-minute data processed",
+                raw_candles=len(price_data),
+                interval=interval,
+                will_aggregate=(interval != "1m")
+            )
+            
+            # Apply candle aggregation if needed
+            if interval != "1m" and price_data:
+                original_count = len(price_data)
+                price_data = self._aggregate_candles(price_data, interval)
+                
+                # Update current_price from aggregated data
+                if price_data:
+                    current_price = price_data[-1]["close"]
+                
+                logger.info(
+                    "Candle aggregation applied",
+                    original_candles=original_count,
+                    aggregated_candles=len(price_data),
+                    interval=interval,
+                    current_price=current_price
+                )
+            
+            # If no current price from data, use fallback
+            if current_price == 0.0:
+                current_price = 6400.0  # SPX fallback price
+            
+            # Create benchmark lines (current price and placeholder strikes)
+            benchmark_lines = {
+                "current_price": current_price,
+                "buy_strike": None,
+                "sell_strike": None
+            }
+            
+            # Create metadata
+            metadata = {
+                "total_candles": len(price_data),  # Reflects actual count after aggregation
+                "last_updated": datetime.utcnow().isoformat() + "Z",
+                "interval": interval,  # Reflects requested interval
+                "period": "1d",  # Always 1d for intraday data
+                "start_date": yesterday,
+                "end_date": today,
+                "data_type": "intraday",
+                "aggregation_applied": (interval != "1m"),
+                "source_resolution": "1m"  # Source data is always 1-minute from API
+            }
+            
+            normalized_data = {
+                "price_data": price_data,
+                "current_price": current_price,
+                "benchmark_lines": benchmark_lines,
+                "metadata": metadata,
+                "interval": interval,  # Use the actual interval passed in
+                "period": "1d"  # Always 1d for intraday data
+            }
+            
+            # Cache the result for 30 seconds (shorter TTL for intraday data)
+            self._set_cache(cache_key, normalized_data, ttl=30)
+            
+            logger.info(
+                "SPX intraday chart data retrieved successfully via ISIN-data",
+                data_points=len(price_data),
+                current_price=current_price,
+                interval=interval,
+                start_date=yesterday,
+                end_date=today,
+                data_type="intraday",
+                aggregation_applied=(interval != "1m"),
+                source_resolution="1m"
+            )
+            
+            return normalized_data
+            
+        except ExternalAPIError:
+            raise
+        except Exception as e:
+            logger.error("Failed to get SPX chart data", error=str(e))
+            raise ExternalAPIError(
+                message=f"Failed to get SPX chart data: {str(e)}",
+                service=self.service_name
+            )
+    
     async def get_intraday_data(
         self,
         ticker: str,
@@ -1940,8 +2279,8 @@ class TheTradeListService(ExternalAPIService):
         """
         Get intraday OHLCV data for chart display
         
-        Uses regular TheTradeList range-data endpoint for all tickers including SPX.
-        SPX works directly with the range-data endpoint, not ISIN.
+        Routes SPX to ISIN quote endpoint which provides daily data only.
+        Uses regular TheTradeList range-data endpoint for SPY and XSP.
         
         Args:
             ticker: Stock ticker symbol (e.g., "SPY", "SPX")
@@ -1963,6 +2302,24 @@ class TheTradeListService(ExternalAPIService):
                 message=f"Ticker {ticker} not supported for intraday data. Supported: {', '.join(supported_tickers)}",
                 service=self.service_name
             )
+        
+        # Route SPX to the ISIN-data endpoint for intraday data
+        if ticker_upper == "SPX":
+            logger.info(
+                "Routing SPX to ISIN-data endpoint for intraday chart data",
+                ticker=ticker_upper,
+                requested_interval=interval,
+                requested_period=period,
+                endpoint="isin-data",
+                data_type="intraday"
+            )
+            # SPX ISIN-data endpoint provides 1-minute interval data
+            # Pass through the requested interval for metadata
+            spx_data = await self.get_spx_chart_data(interval=interval, period="1d")
+            # Add ticker to the response for consistency
+            spx_data["ticker"] = ticker_upper
+            # The data is actually 1-minute intervals from the intraday endpoint
+            return spx_data
         
         # Validate interval
         valid_intervals = {"1m", "5m", "15m", "30m", "1h"}

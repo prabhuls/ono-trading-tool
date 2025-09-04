@@ -155,22 +155,43 @@ export function SpyIntradayChart({
       ctx.stroke();
     }
 
-    // Draw price line
+    // Draw price line or point
     ctx.strokeStyle = '#60A5FA';
+    ctx.fillStyle = '#60A5FA';
     ctx.lineWidth = 2;
-    ctx.beginPath();
-
-    priceData.forEach((point, index) => {
-      const x = padding.left + (index / (priceData.length - 1)) * chartWidth;
+    
+    if (priceData.length === 1) {
+      // For single data point (SPX), draw a prominent point
+      const point = priceData[0];
+      const x = padding.left + chartWidth / 2;
       const y = padding.top + chartHeight - ((point.close - paddedMin) / paddedRange) * chartHeight;
+      
+      // Draw a circle for the single point
+      ctx.beginPath();
+      ctx.arc(x, y, 5, 0, 2 * Math.PI);
+      ctx.fill();
+      
+      // Add a label for the price
+      ctx.fillStyle = '#60A5FA';
+      ctx.font = '12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(`$${point.close.toFixed(2)}`, x, y - 10);
+    } else {
+      // For multiple data points, draw a line
+      ctx.beginPath();
+      priceData.forEach((point, index) => {
+        const x = padding.left + (index / (priceData.length - 1)) * chartWidth;
+        const y = padding.top + chartHeight - ((point.close - paddedMin) / paddedRange) * chartHeight;
 
-      if (index === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    });
-    ctx.stroke();
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      ctx.stroke();
+    }
 
     // Draw benchmark lines
     const drawBenchmarkLine = (price: number, color: string, label: string, isDashed = false) => {
@@ -221,10 +242,14 @@ export function SpyIntradayChart({
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     
-    const numLabels = 6; // Show 6 time labels across the chart
+    const numLabels = priceData.length === 1 ? 1 : 6; // Show 1 label for single point, 6 for multiple
     for (let i = 0; i < numLabels; i++) {
-      const dataIndex = Math.floor((priceData.length - 1) * (i / (numLabels - 1)));
-      const x = padding.left + (dataIndex / (priceData.length - 1)) * chartWidth;
+      const dataIndex = priceData.length === 1 
+        ? 0 
+        : Math.floor((priceData.length - 1) * (i / (numLabels - 1)));
+      const x = priceData.length === 1
+        ? padding.left + chartWidth / 2
+        : padding.left + (dataIndex / (priceData.length - 1)) * chartWidth;
       const timeData = priceData[dataIndex];
       
       if (timeData && timeData.timestamp) {

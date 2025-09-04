@@ -32,6 +32,11 @@ export default function Navbar() {
                 Dashboard
               </span>
             </Link>
+            <Link href="/market-data">
+              <span className="relative font-semibold text-gray-800 hover:text-green-600 transition-colors duration-200 cursor-pointer after:content-[''] after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:h-[2px] after:bg-green-500 hover:after:w-full after:transition-all after:duration-300">
+                Market Data
+              </span>
+            </Link>
             <Link href="/trade-journal" onClick={handleTradeJournalClick}>
               <span className="relative font-semibold text-gray-800 hover:text-green-600 transition-colors duration-200 cursor-pointer after:content-[''] after:absolute after:bottom-[-4px] after:left-0 after:w-0 after:h-[2px] after:bg-green-500 hover:after:w-full after:transition-all after:duration-300">
                 Trade Journal
