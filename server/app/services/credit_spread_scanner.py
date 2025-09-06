@@ -1,6 +1,7 @@
 """
 Credit Spread Scanner Service
 Analyzes credit spreads based on trend direction with safety-first approach
+Uses natural pricing (bid-ask execution) for conservative risk assessment
 Implements exact logic from CashFlowAgent-Scanner-1
 """
 
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 class CreditSpreadScanner:
-    """Handles trend-based credit spread detection with authentic pricing"""
+    """Handles trend-based credit spread detection with natural pricing (conservative approach)"""
     
     def __init__(self):
         self.tradelist_client = TradeListClient()
@@ -320,7 +321,7 @@ class CreditSpreadScanner:
         trend: str, 
         option_type: str
     ) -> Optional[Dict]:
-        """Calculate credit spread metrics using mid prices"""
+        """Calculate credit spread metrics using natural pricing (conservative approach)"""
         try:
             sell_strike = float(sell_contract['strike_price'])
             buy_strike = float(buy_contract['strike_price'])
@@ -344,13 +345,19 @@ class CreditSpreadScanner:
             if sell_bid <= 0 or sell_ask <= 0 or buy_bid <= 0 or buy_ask <= 0:
                 return None
             
-            # Calculate using mid prices
-            sell_mid = (sell_bid + sell_ask) / 2
-            buy_mid = (buy_bid + buy_ask) / 2
-            
-            # Credit spread calculations
-            net_credit = sell_mid - buy_mid
+            # Calculate spread width for bid-ask validation
             spread_width = abs(sell_strike - buy_strike)
+            
+            # Validate bid-ask spreads aren't too wide (reject if > 10% of spread width)
+            sell_spread_pct = (sell_ask - sell_bid) / spread_width * 100 if spread_width > 0 else 0
+            buy_spread_pct = (buy_ask - buy_bid) / spread_width * 100 if spread_width > 0 else 0
+            
+            if sell_spread_pct > 10 or buy_spread_pct > 10:
+                return None
+            
+            # Calculate using natural pricing (conservative execution cost)
+            # Credit spread: sell_bid - buy_ask (actual credit received)
+            net_credit = sell_bid - buy_ask
             
             # Maximum $10 spread width
             if spread_width > 10:
