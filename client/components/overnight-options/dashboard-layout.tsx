@@ -8,7 +8,7 @@ import { SpyIntradayChart } from './spy-intraday-chart';
 import { OptionChainOptimizer } from './option-chain-optimizer';
 import { StatusBars } from './status-bars';
 import { OutsideHoursMessage } from './outside-hours-message';
-import { mockDashboardData, mockStatusBars } from '@/lib/mock-data/overnight-options';
+// Removed mock data import - using real API data only
 import { api } from '@/lib/api';
 import type { 
   ApiMarketStatusResponse, 
@@ -37,25 +37,54 @@ const standardChartIntervals = [
 ];
 
 export function DashboardLayout() {
+  // Initialize with empty states instead of mock data
   const [dashboardData, setDashboardData] = useState({
-    ...mockDashboardData,
-    chartIntervals: standardChartIntervals // Initialize with standard intervals
+    currentSpyPrice: null as number | null,
+    lastUpdated: null as string | null,
+    spreadRecommendation: {
+      strategy: null as string | null,
+      spreadCost: null as number | null,
+      profitTarget: null as number | null,
+      expiration: null as string | null,
+      maxValue: null as number | null,
+      maxReward: null as number | null,
+      maxRisk: null as number | null,
+      roiPotential: null as number | null,
+      targetRoi: null as number | null,
+      buyStrike: null as number | null,
+      sellStrike: null as number | null,
+    },
+    marketStatus: {
+      isOpen: false,
+      nextExpiration: null as string | null,
+      volume: null as string | null,
+      ivRank: null as number | null,
+    },
+    optionChain: [] as any[],
+    chartIntervals: standardChartIntervals,
+    isLive: false,
+    activeTimeRange: null as string | null,
   });
   const [activeTicker, setActiveTicker] = useState('SPY');
-  const [isLoading, setIsLoading] = useState(false); // Don't block initial render
+  const [isLoading, setIsLoading] = useState(true); // Start with loading state
   const [error, setError] = useState<string | null>(null);
   const [marketStatusError, setMarketStatusError] = useState<string | null>(null);
   
   // Option chain specific state
   const [optionChainData, setOptionChainData] = useState<OptionChainData[]>([]);
   const [algorithmResult, setAlgorithmResult] = useState<AlgorithmResult | null>(null);
-  const [optionChainLoading, setOptionChainLoading] = useState(true); // Show loading for option chain initially
+  const [optionChainLoading, setOptionChainLoading] = useState(true);
   const [optionChainError, setOptionChainError] = useState<string | null>(null);
-  const [currentSpyPrice, setCurrentSpyPrice] = useState<number>(585.27);
+  const [currentSpyPrice, setCurrentSpyPrice] = useState<number | null>(null);
   const [maxCost, setMaxCost] = useState<number>(getDefaultMaxCost(activeTicker)); // Default max cost for algorithm
   
   // Active hours state
   const [isActiveHours, setIsActiveHours] = useState<boolean | null>(null); // null = loading
+  
+  // Status bars state
+  const [statusBarsData, setStatusBarsData] = useState({
+    scannerActive: null as string | null
+  });
   const showScansOutsideHours = process.env.NEXT_PUBLIC_SHOW_SCANS_OUTSIDE_ACTIVE_HOURS === 'true';
 
   // Fetch market status from API
@@ -76,10 +105,22 @@ export function DashboardLayout() {
         
         // Update active hours state
         setIsActiveHours(marketStatus.is_live);
+        
+        // Update status bars with dynamic data
+        setStatusBarsData({
+          scannerActive: marketStatus.is_live 
+            ? `Active ${marketStatus.active_time_range} daily for optimal spread scanning.`
+            : `Scanner inactive - next active period: ${marketStatus.active_time_range}.`
+        });
       }
     } catch (error) {
       console.error('Failed to fetch market status:', error);
       setMarketStatusError('Unable to fetch real-time market status');
+      
+      // Set fallback status bar message when API fails
+      setStatusBarsData({
+        scannerActive: 'Scanner status unavailable - please check connection and try refreshing.'
+      });
     }
   };
 
@@ -134,16 +175,21 @@ export function DashboardLayout() {
 
   useEffect(() => {
     const loadData = async () => {
-      // Don't block initial render - show layout immediately
-      setIsLoading(false);
-      
-      // Load data in the background
       try {
-        // Fetch data without blocking
-        fetchMarketStatus();
-        fetchOptionChainData();
+        // Start loading
+        setIsLoading(true);
+        
+        // Fetch data in parallel
+        await Promise.all([
+          fetchMarketStatus(),
+          fetchOptionChainData()
+        ]);
       } catch (err) {
         console.error('Failed to load dashboard data:', err);
+        setError('Failed to load dashboard data');
+      } finally {
+        // Stop loading once data is fetched (success or failure)
+        setIsLoading(false);
       }
     };
     
@@ -250,7 +296,7 @@ export function DashboardLayout() {
               algorithmResult={algorithmResult}
               algorithmLoading={optionChainLoading}
               algorithmError={optionChainError}
-              expiration={optionChainData.length > 0 ? dashboardData.spreadRecommendation.expiration : undefined}
+              expiration={dashboardData.spreadRecommendation.expiration}
               activeTicker={activeTicker}
               onScanForNewSpreads={handleScanForNewSpreads}
               maxCost={maxCost}
@@ -264,8 +310,8 @@ export function DashboardLayout() {
           <div className="lg:col-span-8 space-y-6">
             <SpyIntradayChart
               ticker={activeTicker}
-              buyStrike={algorithmResult?.buy_strike || dashboardData.spreadRecommendation.buyStrike}
-              sellStrike={algorithmResult?.sell_strike || dashboardData.spreadRecommendation.sellStrike}
+              buyStrike={algorithmResult?.buy_strike || null}
+              sellStrike={algorithmResult?.sell_strike || null}
               currentPrice={currentSpyPrice}
               chartIntervals={dashboardData.chartIntervals}
               lastUpdated={dashboardData.lastUpdated}
@@ -274,7 +320,7 @@ export function DashboardLayout() {
             />
             <OptionChainOptimizer
               ticker={activeTicker}
-              optionChain={optionChainData.length > 0 ? optionChainData : dashboardData.optionChain}
+              optionChain={optionChainData}
               expiration={dashboardData.spreadRecommendation.expiration}
               isLoading={optionChainLoading}
               error={optionChainError}
@@ -284,7 +330,7 @@ export function DashboardLayout() {
         </div>
 
         {/* Bottom Status Bars */}
-        <StatusBars statusBars={mockStatusBars} />
+        <StatusBars statusBars={statusBarsData} />
       </div>
     </div>
   );

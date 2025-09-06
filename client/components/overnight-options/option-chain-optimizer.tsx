@@ -1,12 +1,12 @@
 import { Card } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { OptionChainData, AlgorithmResult } from '@/types/overnight-options';
-import { formatCurrency, formatPercentage, formatVolume } from '@/lib/mock-data/overnight-options';
+import { formatCurrency, formatPercentage, formatVolume } from '@/lib/utils/formatters';
 
 interface OptionChainOptimizerProps {
   ticker: string; // The ticker symbol (SPY, SPX, etc.)
   optionChain: OptionChainData[];
-  expiration: string;
+  expiration: string | null;
   isLoading?: boolean;
   error?: string | null;
   algorithmResult?: AlgorithmResult | null;

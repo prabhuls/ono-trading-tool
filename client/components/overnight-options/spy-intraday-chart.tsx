@@ -6,11 +6,11 @@ import { api } from '@/lib/api';
 
 interface SpyIntradayChartProps {
   ticker: string; // The ticker symbol (SPY, SPX, etc.)
-  buyStrike: number;
-  sellStrike: number;
-  currentPrice: number;
+  buyStrike: number | null;
+  sellStrike: number | null;
+  currentPrice: number | null;
   chartIntervals: ChartTimeInterval[];
-  lastUpdated: string;
+  lastUpdated: string | null;
   onIntervalChange?: (interval: string) => void;
   hasAlgorithmResult?: boolean; // To know if strikes are from actual results
 }
@@ -58,7 +58,10 @@ export function SpyIntradayChart({
       
       const response = await api.chartData.getIntradayData(ticker, {
         interval,
-        ...(hasAlgorithmResult ? { buy_strike: buyStrike, sell_strike: sellStrike } : {})
+        ...(hasAlgorithmResult && buyStrike !== null && sellStrike !== null ? { 
+          buy_strike: buyStrike, 
+          sell_strike: sellStrike 
+        } : {})
       });
       
       if (response.success && response.data) {
@@ -387,7 +390,7 @@ export function SpyIntradayChart({
           )}
         </div>
         <div>
-          Last updated: {chartData ? formatTimeET(chartData.metadata.last_updated) : formatTimeET(lastUpdated)}
+          Last updated: {chartData ? formatTimeET(chartData.metadata.last_updated) : (lastUpdated ? formatTimeET(lastUpdated) : 'N/A')}
         </div>
       </div>
     </Card>

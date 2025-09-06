@@ -54,7 +54,7 @@ export interface DashboardData {
 }
 
 export interface StatusBarInfo {
-  scannerActive: string;
+  scannerActive: string | null;
 }
 
 export interface ApiMarketStatusResponse {

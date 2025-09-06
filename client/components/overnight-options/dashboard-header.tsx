@@ -3,7 +3,7 @@ import { RefreshCw } from 'lucide-react';
 
 interface DashboardHeaderProps {
   isLive: boolean;
-  activeTimeRange: string;
+  activeTimeRange: string | null;
   onRefresh?: () => void;
   marketStatusError?: string | null;
 }
@@ -22,7 +22,9 @@ export function DashboardHeader({ isLive, activeTimeRange, onRefresh, marketStat
             </span>
           ) : isLive ? (
             <>
-              <span className="text-foreground">Active: {activeTimeRange}</span>
+              <span className="text-foreground">
+                Active: {activeTimeRange || 'Loading...'}
+              </span>
               <div className="live-indicator ml-2"></div>
               <span className="text-sm text-green-500">Live</span>
             </>
