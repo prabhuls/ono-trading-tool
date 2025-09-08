@@ -37,8 +37,19 @@ export interface StandardizedError extends Error {
 }
 
 // Create axios instance
+const baseURL = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+// Debug logging in development
+if (process.env.NODE_ENV === 'development') {
+  console.log('[API Client] Base URL:', baseURL);
+  console.log('[API Client] Environment vars:', {
+    NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL,
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL
+  });
+}
+
 const apiClient: AxiosInstance = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001",
+  baseURL,
   timeout: 30000,
   headers: {
     "Content-Type": "application/json",

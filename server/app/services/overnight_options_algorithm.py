@@ -489,6 +489,18 @@ class OvernightOptionsAlgorithm:
             # Step 5: Select optimal spread (deepest ITM)
             optimal_spread = self.select_optimal_spread(qualifying_spreads)
             
+            # Debug logging when no spreads found
+            if not optimal_spread and len(qualifying_spreads) == 0:
+                logger.warning(
+                    "No spreads found - debugging info",
+                    ticker=ticker,
+                    total_contracts=len(contracts),
+                    itm_contracts=len(itm_contracts),
+                    current_price=current_price,
+                    max_cost_threshold=self.max_cost_threshold,
+                    spread_width=1.0 if ticker == "SPY" else 5.0
+                )
+            
             # Step 6: Apply highlighting to all contracts
             highlighted_contracts = self.apply_highlighting_to_contracts(contracts, optimal_spread)
             
@@ -532,7 +544,10 @@ class OvernightOptionsAlgorithm:
                 qualified_spreads=len(qualifying_spreads),
                 optimal_spread_found=optimal_spread is not None,
                 buy_strike=optimal_spread["buy_strike"] if optimal_spread else None,
-                sell_strike=optimal_spread["sell_strike"] if optimal_spread else None
+                sell_strike=optimal_spread["sell_strike"] if optimal_spread else None,
+                spread_cost=optimal_spread["spread_cost"] if optimal_spread else None,
+                max_reward=optimal_spread["max_reward"] if optimal_spread else None,
+                roi_potential=optimal_spread["roi_potential"] if optimal_spread else None
             )
             
             return result

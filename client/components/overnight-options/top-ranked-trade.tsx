@@ -213,7 +213,7 @@ export function TopRankedTrade({
             <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border">
               <div className="text-center">
                 <div className="text-foreground font-medium">
-                  {algorithmResult.spread_cost ? formatCurrency(1.0) : 'N/A'}
+                  {algorithmResult.spread_cost ? formatCurrency(activeTicker === 'SPY' ? 1.0 : 5.0) : 'N/A'}
                 </div>
                 <div className="text-xs text-muted-foreground">Max Value</div>
               </div>
