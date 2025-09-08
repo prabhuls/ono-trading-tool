@@ -23,7 +23,7 @@ const getDefaultMaxCost = (ticker: string): number => {
     case 'SPY':
       return 0.74; // Default for SPY ($1-wide spreads)
     case 'SPX':
-      return 3.75; // Default for SPX ($10-wide spreads, scaled proportionally)
+      return 3.75; // Default for SPX ($5-wide spreads, scaled proportionally)
     default:
       return 0.74;
   }

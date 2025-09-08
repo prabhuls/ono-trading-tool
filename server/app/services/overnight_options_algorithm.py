@@ -8,7 +8,7 @@ Based on the requirements from PROJECT_REQUIREMENTS.md:
 1. Filter strikes below current underlying price (in-the-money bias)
 2. Calculate spreads with max cost filtering (default $0.74)
    - SPY: $1-wide spreads
-   - SPX: $10-wide spreads (proportional to ~10x price scale)
+   - SPX: $5-wide spreads (proportional to ~5x price scale)
 3. Select deepest ITM spread (lowest sell strike)
 4. Mark BUY and SELL strikes with highlighting
 """
@@ -28,7 +28,7 @@ class OvernightOptionsAlgorithm:
     Overnight Options Algorithm implementation
     
     This service implements the overnight options trading algorithm that identifies
-    optimal call debit spreads for SPY ($1-wide) and SPX ($10-wide) options.
+    optimal call debit spreads for SPY ($1-wide) and SPX ($5-wide) options.
     """
     
     def __init__(self, max_cost_threshold: float = 0.74):
@@ -68,7 +68,7 @@ class OvernightOptionsAlgorithm:
         """
         Calculate the actual cost of a spread
         
-        SPY: $1-wide spreads, SPX: $10-wide spreads (scaled appropriately)
+        SPY: $1-wide spreads, SPX: $5-wide spreads (scaled appropriately)
         Formula: Buy Ask - Sell Bid (the actual debit paid)
         
         Args:
@@ -109,8 +109,8 @@ class OvernightOptionsAlgorithm:
         Returns:
             Dictionary with max_reward, max_risk, roi_potential, profit_target
         """
-        # Spread width: SPY uses $1, SPX uses $10
-        max_value = 1.00 if ticker == "SPY" else 10.00
+        # Spread width: SPY uses $1, SPX uses $5
+        max_value = 1.00 if ticker == "SPY" else 5.00
         max_reward = max_value - spread_cost
         max_risk = spread_cost
         roi_potential = (max_reward / spread_cost * 100) if spread_cost > 0 else 0
@@ -236,7 +236,7 @@ class OvernightOptionsAlgorithm:
         """
         Find all spreads that qualify based on cost threshold
         
-        SPY: $1-wide spreads, SPX: $10-wide spreads
+        SPY: $1-wide spreads, SPX: $5-wide spreads
         
         Args:
             itm_contracts: List of ITM option contracts
@@ -251,7 +251,7 @@ class OvernightOptionsAlgorithm:
         sorted_contracts = sorted(itm_contracts, key=lambda x: float(x.get("strike", 0)))
         
         # Determine spread width based on ticker
-        spread_width = 1.0 if ticker == "SPY" else 10.0
+        spread_width = 1.0 if ticker == "SPY" else 5.0
         
         # Log detailed contract information
         contract_strikes = [float(c.get("strike", 0)) for c in sorted_contracts]
@@ -584,7 +584,7 @@ class OvernightOptionsAlgorithm:
     
     def _get_result_message(self, optimal_spread: Optional[Dict[str, Any]], qualified_count: int, ticker: str = "SPY") -> str:
         """Get appropriate result message based on algorithm outcome"""
-        spread_description = "$1-wide" if ticker == "SPY" else "$10-wide"
+        spread_description = "$1-wide" if ticker == "SPY" else "$5-wide"
         
         if optimal_spread:
             return f"Optimal {spread_description} {ticker} spread: {optimal_spread['buy_strike']}/{optimal_spread['sell_strike']} at ${optimal_spread['spread_cost']} cost"

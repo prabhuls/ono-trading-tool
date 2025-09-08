@@ -86,7 +86,7 @@ async def get_option_chain(
     algorithm to identify optimal call debit spreads. The algorithm:
     
     1. Filters strikes below current underlying price (ITM bias)
-    2. Calculates spread costs (SPY: $1-wide spreads, SPX: $10-wide spreads)
+    2. Calculates spread costs (SPY: $1-wide spreads, SPX: $5-wide spreads)
     3. Applies maximum cost filtering
     4. Selects deepest ITM spread (lowest sell strike)
     5. Highlights BUY and SELL options
@@ -95,7 +95,7 @@ async def get_option_chain(
     
     **Spread Cost Ranges**:
     - SPY: Default $0.74, typical range $0.50-$2.00 for $1-wide spreads
-    - SPX: Default $3.75, typical range $3.00-$20.00 for $10-wide spreads
+    - SPX: Default $3.75, typical range $3.00-$20.00 for $5-wide spreads
     
     Args:
         ticker: Stock ticker (supports SPY and SPX)
