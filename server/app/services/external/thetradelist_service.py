@@ -1344,31 +1344,153 @@ class TheTradeListService(ExternalAPIService):
                 service=self.service_name
             )
 
+    async def get_batch_options_snapshot(
+        self,
+        option_contracts: List[str],
+        underlying_ticker: str
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Get real-time pricing snapshots for multiple options
+
+        Since TheTradeList API doesn't have a batch endpoint for options,
+        we'll fetch them individually but with concurrent requests for better performance.
+
+        Args:
+            option_contracts: List of option contract symbols (e.g., ["O:SPY250117C00585000"])
+            underlying_ticker: The underlying stock ticker (e.g., "SPY")
+
+        Returns:
+            Dictionary mapping option ticker to pricing data
+
+        Raises:
+            ExternalAPIError: On API errors
+        """
+        if not option_contracts:
+            return {}
+
+        pricing_map = {}
+
+        # Process in batches to avoid overwhelming the API
+        batch_size = 5  # Process 5 options at a time
+
+        for i in range(0, len(option_contracts), batch_size):
+            batch = option_contracts[i:i+batch_size]
+
+            # Create concurrent tasks for this batch
+            tasks = []
+            for option_ticker in batch:
+                tasks.append(self._fetch_single_option_snapshot(option_ticker, underlying_ticker))
+
+            # Execute batch concurrently
+            import asyncio
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Process results
+            for option_ticker, result in zip(batch, results):
+                if isinstance(result, Exception):
+                    logger.warning(
+                        "Failed to fetch option snapshot",
+                        option=option_ticker,
+                        error=str(result)
+                    )
+                    continue
+
+                if result:
+                    pricing_map[option_ticker] = result
+
+        logger.info(
+            "Batch options pricing completed",
+            contracts_requested=len(option_contracts),
+            contracts_received=len(pricing_map)
+        )
+
+        return pricing_map
+
+    async def _fetch_single_option_snapshot(
+        self,
+        option_ticker: str,
+        underlying_ticker: str
+    ) -> Dict[str, Any]:
+        """
+        Fetch snapshot for a single option contract
+
+        Args:
+            option_ticker: Option contract symbol (e.g., "O:SPY250117C00585000")
+            underlying_ticker: Underlying stock ticker (e.g., "SPY")
+
+        Returns:
+            Option pricing data
+        """
+        endpoint = "/v1/data/snapshot-options"
+        params = {
+            "ticker": underlying_ticker,
+            "option": option_ticker
+        }
+
+        try:
+            raw_data = await self.get(endpoint, params=params, use_cache=True, cache_ttl=30)
+
+            if raw_data and raw_data.get("results"):
+                results = raw_data["results"]
+
+                # Extract pricing data from the response
+                day_data = results.get("day", {})
+                last_quote = results.get("last_quote", {})
+                last_trade = results.get("last_trade", {})
+
+                # Get bid/ask from last_quote
+                bid = last_quote.get("bid", 0) if last_quote else 0
+                ask = last_quote.get("ask", 0) if last_quote else 0
+
+                # If no quote data, try to use last trade
+                if bid == 0 and ask == 0 and last_trade:
+                    last_price = last_trade.get("price", 0)
+                    if last_price > 0:
+                        # Use last trade price as midpoint
+                        bid = last_price * 0.98  # Estimate bid as 2% below last
+                        ask = last_price * 1.02  # Estimate ask as 2% above last
+
+                return {
+                    "bid": bid,
+                    "ask": ask,
+                    "volume": day_data.get("volume", 0),
+                    "open_interest": results.get("open_interest", 0),
+                    "implied_volatility": results.get("implied_volatility"),  # May not be available
+                    "last_price": last_trade.get("price", 0) if last_trade else 0,
+                    "day": day_data
+                }
+
+            return None
+
+        except Exception as e:
+            logger.debug(f"Failed to fetch option snapshot for {option_ticker}: {str(e)}")
+            return None
+
     async def get_last_quote(self, ticker: str) -> Dict[str, Any]:
         """
         Get last quote for a stock or option ticker
-        
+
         Args:
             ticker: Ticker symbol (stock or option contract)
-            
+
         Returns:
             Last quote data with bid/ask prices and sizes
-            
+
         Raises:
             ExternalAPIError: On API errors
         """
         endpoint = "/v1/data/last-quote"
         params = {"ticker": ticker}
-        
+
         try:
             logger.info("Fetching last quote", ticker=ticker)
-            
+
             raw_data = await self.get(endpoint, params=params, use_cache=True, cache_ttl=30)  # Cache for 30 seconds
-            
+
             logger.info("Last quote retrieved successfully", ticker=ticker)
-            
+
             return raw_data
-            
+
         except ExternalAPIError:
             raise
         except Exception as e:
@@ -1656,271 +1778,150 @@ class TheTradeListService(ExternalAPIService):
                 is_deep_itm_scenario=(ticker == "SPX" and len(nearby_contracts) == len(call_contracts))
             )
             
-            # Enhance contracts with pricing data (limited set with error handling)
+            # Enhance contracts with pricing data using batch API call
             enhanced_contracts = []
-            
-            # Only fetch pricing for nearby contracts (max 20 to prevent excessive API calls)
-            contracts_to_price = nearby_contracts[:20]
-            
-            # Track API call success/failure for circuit breaker
-            pricing_failures = 0
-            max_failures = 5  # Stop fetching if too many failures
-            
-            for i, contract in enumerate(contracts_to_price):
+
+            # Prepare contracts for batch pricing (limit to prevent excessive data)
+            max_contracts_to_price = 50  # Increased from 20 since we're doing batch calls
+            contracts_to_price = nearby_contracts[:max_contracts_to_price]
+
+            # Extract option tickers for batch call
+            option_tickers = [contract.get("ticker") for contract in contracts_to_price if contract.get("ticker")]
+
+            if option_tickers:
                 try:
-                    # Circuit breaker: stop if too many failures
-                    if pricing_failures >= max_failures:
-                        logger.warning(
-                            "Too many pricing API failures, stopping option chain enhancement",
-                            failures=pricing_failures,
-                            contracts_processed=i
-                        )
-                        break
-                    
-                    option_ticker = contract.get("ticker")
-                    if not option_ticker:
-                        logger.debug("Skipping contract with missing ticker")
-                        continue
-                    
-                    # Get pricing snapshot for this contract with timeout protection
-                    pricing_data = await self.get_options_snapshot(ticker, option_ticker)
-                    
-                    if not pricing_data or not pricing_data.get("results"):
-                        pricing_failures += 1
-                        logger.debug(
-                            "Empty pricing data for contract",
-                            option_ticker=option_ticker
-                        )
-                        continue
-                    
-                    # Extract relevant pricing information
-                    results = pricing_data.get("results", {})
-                    last_quote = results.get("last_quote", {})
-                    day_data = results.get("day", {})
-                    details = results.get("details", {})
-                    
-                    # Debug: Log the structure to see if IV is available
-                    logger.debug(
-                        "Option pricing data structure",
-                        option_ticker=option_ticker,
-                        results_keys=list(results.keys()) if results else [],
-                        last_quote_keys=list(last_quote.keys()) if last_quote else [],
-                        details_keys=list(details.keys()) if details else []
+                    # Fetch pricing data for all contracts
+                    logger.info(
+                        "Fetching batch pricing data",
+                        ticker=ticker,
+                        num_contracts=len(option_tickers)
                     )
-                    
-                    # Validate that we have usable pricing data with proper null handling
-                    bid_raw = last_quote.get("bid")
-                    ask_raw = last_quote.get("ask")
-                    
-                    # Handle None values and convert to float safely
-                    try:
-                        bid = float(bid_raw) if bid_raw is not None else 0.0
-                    except (ValueError, TypeError):
-                        bid = 0.0
-                    
-                    try:
-                        ask = float(ask_raw) if ask_raw is not None else 0.0
-                    except (ValueError, TypeError):
-                        ask = 0.0
-                    
-                    if bid == 0 and ask == 0:
-                        logger.debug(
-                            "No pricing data available for contract",
-                            option_ticker=option_ticker,
-                            bid_raw=bid_raw,
-                            ask_raw=ask_raw
-                        )
-                        pricing_failures += 1
-                        continue
-                    
-                    # Enhanced implied volatility extraction with SPX fallback logic
-                    implied_vol = None  # Start with None to indicate unavailable data
-                    iv_source = "unavailable"
-                    
-                    # Check multiple possible field names for IV
-                    iv_fields_to_try = [
-                        ('last_quote', 'implied_volatility'),
-                        ('last_quote', 'iv'), 
-                        ('details', 'implied_volatility'),
-                        ('details', 'iv'),
-                        ('greeks', 'implied_volatility'),
-                        ('greeks', 'iv'),
-                        ('results', 'implied_volatility'),
-                        ('results', 'iv')
-                    ]
-                    
-                    # Try to extract IV from API data first
-                    for source, field in iv_fields_to_try:
-                        source_data = {'last_quote': last_quote, 'details': details, 'greeks': results.get('greeks', {}), 'results': results}.get(source, {})
-                        if isinstance(source_data, dict) and field in source_data:
+
+                    # Get batch pricing data with concurrent requests
+                    pricing_map = await self.get_batch_options_snapshot(option_tickers, ticker)
+
+                    logger.info(
+                        "Batch pricing data received",
+                        contracts_requested=len(option_tickers),
+                        contracts_received=len(pricing_map)
+                    )
+
+                    # Process each contract with its pricing data
+                    for contract in contracts_to_price:
+                        option_ticker = contract.get("ticker")
+                        if not option_ticker or option_ticker not in pricing_map:
+                            continue
+
+                        option_data = pricing_map[option_ticker]
+
+                        # Extract pricing data
+                        bid = float(option_data.get("bid", 0))
+                        ask = float(option_data.get("ask", 0))
+
+                        if bid == 0 and ask == 0:
+                            continue
+
+                        # Extract other data
+                        volume = option_data.get("volume", 0)
+                        open_interest = option_data.get("open_interest", 0)
+                        implied_vol = option_data.get("implied_volatility")
+                        iv_source = "api" if implied_vol else "unavailable"
+
+                        # For SPX, consider Black-Scholes approximation if needed
+                        if implied_vol is None and ticker.upper() == "SPX" and bid > 0 and ask > 0:
                             try:
-                                iv_value = float(source_data.get(field, 0))
-                                if iv_value > 0:  # Only use if it's a positive value
-                                    implied_vol = iv_value
-                                    iv_source = f"{source}.{field}"
-                                    logger.info(f"Found IV {iv_value} in {iv_source} for {option_ticker}")
-                                    break
-                            except (ValueError, TypeError):
-                                continue
-                    
-                    # If no IV found from API and this is SPX, try Black-Scholes approximation
-                    if implied_vol is None and ticker.upper() == "SPX":
-                        try:
-                            # Calculate IV using Black-Scholes approximation with null safety
-                            # Ensure bid and ask are valid numbers before calculating midpoint
-                            if (bid is not None and ask is not None and 
-                                isinstance(bid, (int, float)) and isinstance(ask, (int, float)) and
-                                bid > 0 and ask > 0):
                                 market_price = (bid + ask) / 2.0
-                            else:
-                                market_price = 0.0
-                            
-                            if market_price > 0:
-                                # Extract strike price with null safety
-                                strike_raw = details.get("strike_price", contract.get("strike_price"))
-                                try:
-                                    strike_price = float(strike_raw) if strike_raw is not None else 0.0
-                                except (ValueError, TypeError):
-                                    strike_price = 0.0
-                                
+                                strike_price = float(contract.get("strike_price", 0))
                                 exp_date = contract.get("expiration_date", expiration_date)
-                                
-                                # Add comprehensive null checks before Black-Scholes calculation
-                                if (strike_price is not None and strike_price > 0 and 
-                                    exp_date is not None and 
-                                    current_underlying_price is not None and current_underlying_price > 0):
-                                    
-                                    # Calculate time to expiration
+
+                                if strike_price > 0 and exp_date and current_underlying_price > 0:
                                     time_to_exp = BlackScholesCalculator.calculate_time_to_expiration(exp_date)
-                                    
-                                    # Validate all parameters are not None and have valid values
-                                    if (time_to_exp is not None and time_to_exp > 0 and 
-                                        market_price is not None and market_price > 0):
-                                        
-                                        logger.debug(
-                                            f"Black-Scholes parameters validated for {option_ticker}",
-                                            market_price=market_price,
-                                            current_underlying_price=current_underlying_price,
-                                            strike_price=strike_price,
-                                            time_to_exp=time_to_exp,
-                                            risk_free_rate=0.05
-                                        )
-                                        
-                                        # Approximate IV using Black-Scholes
+
+                                    if time_to_exp and time_to_exp > 0:
                                         approx_iv = BlackScholesCalculator.approximate_implied_volatility(
                                             market_price=market_price,
                                             S=current_underlying_price,
                                             K=strike_price,
                                             T=time_to_exp,
-                                            r=0.05  # 5% risk-free rate assumption
+                                            r=0.05
                                         )
-                                        
+
                                         if approx_iv is not None:
                                             implied_vol = approx_iv
                                             iv_source = "black_scholes_approximation"
-                                            logger.info(
-                                                f"Calculated approximate IV {approx_iv:.4f} for SPX {option_ticker} using Black-Scholes",
-                                                market_price=market_price,
-                                                strike=strike_price,
-                                                underlying=current_underlying_price,
-                                                time_to_exp=time_to_exp
-                                            )
-                                    else:
-                                        logger.debug(
-                                            f"Invalid Black-Scholes parameters for {option_ticker}",
-                                            time_to_exp=time_to_exp,
-                                            market_price=market_price
-                                        )
-                                else:
-                                    logger.debug(
-                                        f"Missing required parameters for Black-Scholes calculation for {option_ticker}",
-                                        strike_price=strike_price,
-                                        exp_date=exp_date,
-                                        current_underlying_price=current_underlying_price
-                                    )
-                        except Exception as bs_error:
-                            logger.debug(
-                                f"Black-Scholes IV calculation failed for {option_ticker}: {str(bs_error)}"
-                            )
-                    
-                    # Log the final IV result
-                    if implied_vol is not None:
-                        logger.debug(
-                            f"Final IV for {option_ticker}: {implied_vol:.4f} (source: {iv_source})"
-                        )
-                    else:
-                        logger.debug(
-                            f"No IV available for {option_ticker} - will use null value"
-                        )
-                    
-                    # Create enhanced contract with null safety for all numeric fields
-                    strike_raw = details.get("strike_price", contract.get("strike_price"))
-                    volume_raw = day_data.get("volume")
-                    open_interest_raw = results.get("open_interest")
-                    
-                    # Safely convert strike price
-                    try:
-                        strike = float(strike_raw) if strike_raw is not None else 0.0
-                    except (ValueError, TypeError):
-                        strike = 0.0
-                    
-                    # Safely convert volume
-                    try:
-                        volume = int(volume_raw) if volume_raw is not None else 0
-                    except (ValueError, TypeError):
-                        volume = 0
-                    
-                    # Safely convert open interest
-                    try:
-                        open_interest = int(open_interest_raw) if open_interest_raw is not None else 0
-                    except (ValueError, TypeError):
-                        open_interest = 0
+                            except Exception as bs_error:
+                                logger.debug(f"Black-Scholes IV calculation failed: {str(bs_error)}")
 
-                    enhanced_contract = {
-                        "strike": strike,
-                        "bid": bid,
-                        "ask": ask,
-                        "volume": volume,
-                        "open_interest": open_interest,
-                        "implied_volatility": implied_vol,  # Now can be None for unavailable data
-                        "iv_source": iv_source,  # Track source of IV calculation
-                        "contract_ticker": option_ticker,
-                        "expiration_date": contract.get("expiration_date"),
-                        "last_updated": datetime.utcnow().isoformat() + "Z",
-                        "is_highlighted": None
-                    }
-                    
-                    enhanced_contracts.append(enhanced_contract)
-                    
-                    # Small delay between API calls to avoid overwhelming the API
-                    if i < len(contracts_to_price) - 1:  # Don't delay after last contract
-                        await asyncio.sleep(0.1)  # 100ms delay
-                    
-                except Exception as contract_error:
-                    pricing_failures += 1
-                    logger.warning(
-                        "Failed to enhance contract with pricing",
-                        contract_ticker=contract.get("ticker"),
-                        error=str(contract_error),
-                        failures=pricing_failures
+                        # Create enhanced contract
+                        strike = float(contract.get("strike_price", 0))
+
+                        enhanced_contract = {
+                            "strike": strike,
+                            "bid": bid,
+                            "ask": ask,
+                            "volume": volume,
+                            "open_interest": open_interest,
+                            "implied_volatility": implied_vol,
+                            "iv_source": iv_source,
+                            "contract_ticker": option_ticker,
+                            "expiration_date": contract.get("expiration_date"),
+                            "last_updated": datetime.utcnow().isoformat() + "Z",
+                            "is_highlighted": None
+                        }
+
+                        enhanced_contracts.append(enhanced_contract)
+
+                except Exception as batch_error:
+                    logger.error(
+                        "Failed to process batch pricing data, falling back to sequential calls",
+                        error=str(batch_error),
+                        ticker=ticker
                     )
-                    
-                    # If we're getting too many errors, stop processing
-                    if pricing_failures >= max_failures:
-                        logger.error(
-                            "Stopping option pricing due to excessive failures",
-                            failures=pricing_failures,
-                            contracts_processed=i
-                        )
-                        break
-                    
-                    continue
-            
+
+                    # Fallback to sequential API calls if batch fails
+                    for contract in contracts_to_price[:20]:  # Limit to 20 for fallback
+                        try:
+                            option_ticker = contract.get("ticker")
+                            if not option_ticker:
+                                continue
+
+                            pricing_data = await self.get_options_snapshot(ticker, option_ticker)
+
+                            if pricing_data and pricing_data.get("results"):
+                                results = pricing_data.get("results", {})
+                                last_quote = results.get("last_quote", {})
+
+                                bid = float(last_quote.get("bid", 0)) if last_quote.get("bid") else 0
+                                ask = float(last_quote.get("ask", 0)) if last_quote.get("ask") else 0
+
+                                if bid > 0 or ask > 0:
+                                    enhanced_contract = {
+                                        "strike": float(contract.get("strike_price", 0)),
+                                        "bid": bid,
+                                        "ask": ask,
+                                        "volume": 0,
+                                        "open_interest": 0,
+                                        "implied_volatility": None,
+                                        "iv_source": "unavailable",
+                                        "contract_ticker": option_ticker,
+                                        "expiration_date": contract.get("expiration_date"),
+                                        "last_updated": datetime.utcnow().isoformat() + "Z",
+                                        "is_highlighted": None
+                                    }
+                                    enhanced_contracts.append(enhanced_contract)
+
+                            await asyncio.sleep(0.1)  # Small delay between calls
+
+                        except Exception as fallback_error:
+                            logger.debug(f"Fallback pricing failed for {contract.get('ticker')}: {str(fallback_error)}")
+                            continue
+            else:
+                logger.info("No option tickers to price")
+
             logger.info(
                 "Option pricing enhancement completed",
                 contracts_enhanced=len(enhanced_contracts),
-                pricing_failures=pricing_failures,
-                total_attempted=min(len(contracts_to_price), i + 1) if 'i' in locals() else 0
+                total_attempted=len(contracts_to_price)
             )
             
             # Sort by strike price

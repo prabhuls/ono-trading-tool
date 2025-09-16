@@ -50,7 +50,7 @@ if (process.env.NODE_ENV === 'development') {
 
 const apiClient: AxiosInstance = axios.create({
   baseURL,
-  timeout: 30000,
+  timeout: 60000, // Increased to 60 seconds for option chain API calls
   headers: {
     "Content-Type": "application/json",
   },

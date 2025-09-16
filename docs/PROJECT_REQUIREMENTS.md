@@ -3,6 +3,8 @@
 ## Executive Summary
 The Overnight Options Assistant uses a sophisticated multi-step algorithm to identify the optimal $1-wide call debit spread for SPY options during the critical 3:20-3:40 PM ET trading window. The system prioritizes deep in-the-money spreads with controlled risk profiles and favorable overnight holding characteristics.
 
+Make sure all the calcs match the code in the replit code base here /Users/prabhulsankar/Sites/ono-trading-tool/replit-code-to-copy/OvernightOptionsTracker
+
 ## Core Algorithm Overview
 
 ### Step 1: Market Data Collection
