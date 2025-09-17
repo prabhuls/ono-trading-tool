@@ -2,14 +2,13 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlgorithmResult } from '@/types/overnight-options';
-import { formatCurrency, formatPercentage, formatROI } from '@/lib/utils/formatters';
+import { formatCurrency, formatROI } from '@/lib/utils/formatters';
 import { useStockPrice } from '@/lib/hooks/useStockPrice';
 import { RefreshCw } from 'lucide-react';
 import type { SupportedTicker } from '@/types/stock-price';
 import { MaxCostDialog } from './max-cost-dialog';
 
 interface TopRankedTradeProps {
-  currentSpyPrice: number | null;
   algorithmResult: AlgorithmResult | null;
   algorithmLoading: boolean;
   algorithmError: string | null;
@@ -21,8 +20,7 @@ interface TopRankedTradeProps {
   onTickerChange?: (ticker: string) => void;
 }
 
-export function TopRankedTrade({ 
-  currentSpyPrice, 
+export function TopRankedTrade({
   algorithmResult,
   algorithmLoading,
   algorithmError,

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { DashboardHeader } from './dashboard-header';
 import { TopRankedTrade } from './top-ranked-trade';
 import { MarketStatus } from './market-status';
@@ -36,7 +37,13 @@ const standardChartIntervals = [
   { label: '15min', value: '15m', isActive: false },
 ];
 
-export function DashboardLayout() {
+interface DashboardLayoutProps {
+  initialTicker?: string;
+}
+
+export function DashboardLayout({ initialTicker }: DashboardLayoutProps = {}) {
+  const router = useRouter();
+  const pathname = usePathname();
   // Initialize with empty states instead of mock data
   const [dashboardData, setDashboardData] = useState({
     currentSpyPrice: null as number | null,
@@ -65,7 +72,10 @@ export function DashboardLayout() {
     isLive: false,
     activeTimeRange: null as string | null,
   });
-  const [activeTicker, setActiveTicker] = useState('SPY');
+  // Initialize ticker from prop or default to SPY
+  const validTickers = ['SPY', 'SPX'];
+  const defaultTicker = initialTicker && validTickers.includes(initialTicker) ? initialTicker : 'SPY';
+  const [activeTicker, setActiveTicker] = useState(defaultTicker);
   const [isLoading, setIsLoading] = useState(true); // Start with loading state
   const [error, setError] = useState<string | null>(null);
   const [marketStatusError, setMarketStatusError] = useState<string | null>(null);
@@ -251,18 +261,21 @@ export function DashboardLayout() {
     try {
       // Update the active ticker
       setActiveTicker(ticker);
-      
+
       // Immediately clear algorithm result to remove old strikes
       setAlgorithmResult(null);
-      
+
       // Reset current price to avoid showing old ticker's price with new ticker's name
       setCurrentSpyPrice(0); // Will be updated when new data loads
-      
+
       // Both SPY and SPX use the same intervals now - no need to update chartIntervals
-      
+
       // Update max cost to ticker-specific default
       const newMaxCost = getDefaultMaxCost(ticker);
       setMaxCost(newMaxCost);
+
+      // Update the URL to reflect the new ticker
+      router.push(`/${ticker}`);
     } catch (error) {
       // Silent fail for now (no monitoring setup)
     }
@@ -292,7 +305,6 @@ export function DashboardLayout() {
           {/* Left Sidebar */}
           <div className="lg:col-span-4 space-y-6">
             <TopRankedTrade
-              currentSpyPrice={currentSpyPrice}
               algorithmResult={algorithmResult}
               algorithmLoading={optionChainLoading}
               algorithmError={optionChainError}

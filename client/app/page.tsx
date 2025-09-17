@@ -4,7 +4,7 @@ import ErrorBoundary from '@/components/error-boundary';
 export default function Dashboard() {
   return (
     <ErrorBoundary>
-      <DashboardLayout />
+      <DashboardLayout initialTicker="SPY" />
     </ErrorBoundary>
   );
 }
