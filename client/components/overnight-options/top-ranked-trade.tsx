@@ -140,7 +140,7 @@ export function TopRankedTrade({
                 <div className="h-4 bg-gray-800 rounded animate-pulse mx-8"></div>
                 {activeTicker === 'SPX' && (
                   <div className="text-xs text-yellow-400 text-center mt-2">
-                    Loading {activeTicker} data... This may take 10-15 seconds
+                    Loading {activeTicker} data... This may take a moment
                   </div>
                 )}
               </div>
