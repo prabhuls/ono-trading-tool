@@ -140,9 +140,9 @@ export function OptionChainOptimizer({
             </tr>
           </thead>
           <tbody>
-            {optionChain.map((option) => (
-              <tr 
-                key={option.strike}
+            {optionChain.map((option, index) => (
+              <tr
+                key={option.contract_ticker || `${option.strike}_${index}`}
                 className={`
                   ${option.isHighlighted === 'buy' ? 'option-chain-row-buy' : ''}
                   ${option.isHighlighted === 'sell' ? 'option-chain-row-sell' : ''}

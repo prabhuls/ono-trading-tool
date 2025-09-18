@@ -277,61 +277,162 @@ class TradeListClient:
     
     async def get_stock_price(self, symbol: str) -> Optional[float]:
         """Get current stock price for a symbol"""
+        # For SPX, try to get OHLCV data since quote returns None
+        if symbol.upper() == "SPX":
+            ohlcv = await self.get_ohlcv(symbol)
+            if ohlcv:
+                return ohlcv.get("close")
+
+        # For other symbols, try quote first
         quote = await self.get_quote(symbol)
         if quote:
             return quote.get("price")
+
+        # Fallback to OHLCV
+        ohlcv = await self.get_ohlcv(symbol)
+        if ohlcv:
+            return ohlcv.get("close")
+
         return None
     
-    async def get_options_contracts(self, symbol: str, limit: int = 1000) -> List[Dict]:
-        """Get options contracts for a symbol - Matches PHP exactly"""
-        # PHP uses this exact URL structure
+    async def get_options_contracts(self, symbol: str, limit: int = 1000, fetch_all: bool = True,
+                                   current_price: Optional[float] = None,
+                                   target_strikes_below_price: int = 20,
+                                   target_strikes_above_price: int = 20) -> List[Dict]:
+        """
+        Get options contracts for a symbol with pagination support
+
+        Args:
+            symbol: The underlying ticker symbol
+            limit: Max contracts per page
+            fetch_all: If False and current_price provided, use smart pagination
+            current_price: Current price of underlying (for smart pagination)
+            target_strikes_below_price: Number of unique strikes to fetch below current price
+            target_strikes_above_price: Number of unique strikes to fetch above current price
+
+        Returns:
+            List of option contracts
+        """
         url = f"{self.base_url}/options-contracts"
-        params = {
-            "underlying_ticker": symbol,
-            "limit": str(limit),
-            "apiKey": self.options_api_key  # PHP uses different key for options
-        }
-        
-        # Build full URL like PHP
-        full_url = f"{url}?underlying_ticker={params['underlying_ticker']}&limit={params['limit']}&apiKey={params['apiKey']}"
-        
-        logger.info(f"Fetching options contracts for {symbol}")
-        
-        try:
-            if not self.session:
-                self.session = aiohttp.ClientSession()
-                
-            async with self.session.get(full_url, timeout=30) as response:
-                if response.status != 200:
-                    logger.error(f"Options request failed: {response.status}")
-                    return []
-                    
-                response = await response.json()
-        except Exception as e:
-            logger.error(f"Options error: {str(e)}")
-            return []
-        
-        if not response:
-            return []
-        
-        # Extract contracts from various response formats - matches PHP logic
-        contracts = []
-        if isinstance(response, dict):
-            if "results" in response and isinstance(response["results"], list):
-                contracts = response["results"]
-            elif "contracts" in response and isinstance(response["contracts"], list):
-                contracts = response["contracts"]
-            elif "data" in response:
-                contracts = response["data"]
-        elif isinstance(response, list):
-            contracts = response
-        
-        # Normalize contract format
+
+        # Set higher timeout for SPX as it has many contracts
+        timeout_seconds = 120 if symbol.upper() == "SPX" else 60
+
+        all_contracts = []
+        page_count = 0
+        next_url_param = None
+
+        # For smart pagination tracking
+        found_current_price_range = False
+        unique_strikes_above = set()
+        unique_strikes_below = set()
+
+        logger.info(f"Fetching options contracts for {symbol} (fetch_all={fetch_all}, current_price={current_price})")
+
+        while True:
+            page_count += 1
+
+            # Build params for this request
+            params = {
+                "underlying_ticker": symbol,
+                "limit": str(limit),
+                "apiKey": self.options_api_key,
+                "sort": "strike_price",  # Sort by strike price
+                "order": "desc"  # Descending order (highest strikes first)
+            }
+
+            # Add next_url parameter if we have it from previous response
+            if next_url_param:
+                params["next_url"] = next_url_param
+
+            # Build full URL with params
+            param_str = "&".join([f"{k}={v}" for k, v in params.items()])
+            full_url = f"{url}?{param_str}"
+
+            if page_count > 1:
+                logger.info(f"Fetching page {page_count} for {symbol} options...")
+
+            try:
+                if not self.session:
+                    self.session = aiohttp.ClientSession()
+
+                async with self.session.get(full_url, timeout=timeout_seconds) as response:
+                    if response.status != 200:
+                        logger.error(f"Options request failed: {response.status}")
+                        break
+
+                    response_data = await response.json()
+            except asyncio.TimeoutError:
+                logger.error(f"Timeout fetching options page {page_count} for {symbol} after {timeout_seconds}s")
+                break
+            except Exception as e:
+                logger.error(f"Options error on page {page_count}: {str(e)}")
+                break
+
+            if not response_data:
+                break
+
+            # Extract contracts from various response formats
+            page_contracts = []
+            if isinstance(response_data, dict):
+                if "results" in response_data and isinstance(response_data["results"], list):
+                    page_contracts = response_data["results"]
+                elif "contracts" in response_data and isinstance(response_data["contracts"], list):
+                    page_contracts = response_data["contracts"]
+                elif "data" in response_data:
+                    page_contracts = response_data["data"]
+
+                # Check for pagination - next_url field
+                next_url_param = response_data.get("next_url")
+            elif isinstance(response_data, list):
+                page_contracts = response_data
+                next_url_param = None
+
+            # Add page contracts to total
+            all_contracts.extend(page_contracts)
+
+            # Smart pagination logic when not fetching all
+            if not fetch_all and current_price is not None:
+                # Count unique strikes above and below current price
+                # Since we're sorting DESC, we get highest strikes first
+                for contract in page_contracts:  # Check contracts from this page
+                    strike = float(contract.get('strike_price', 0) or contract.get('strike', 0))
+                    if strike > current_price:
+                        unique_strikes_above.add(strike)
+                    elif strike < current_price:
+                        unique_strikes_below.add(strike)
+                        found_current_price_range = True  # We've passed the current price
+
+                logger.info(f"Page {page_count}: Retrieved {len(page_contracts)} contracts, "
+                          f"strikes above {current_price}: {len(unique_strikes_above)}, "
+                          f"strikes below: {len(unique_strikes_below)}")
+
+                # Exit early if we have enough unique strikes on both sides of current price
+                # Since we're sorting DESC, we first get strikes above, then strikes below
+                # Exit when we have passed current price and have enough strikes below
+                if found_current_price_range and len(unique_strikes_below) >= target_strikes_below_price:
+                    # We have enough strikes below, and we already have strikes above
+                    logger.info(f"Early exit: Found {len(unique_strikes_above)} strikes above and "
+                              f"{len(unique_strikes_below)} strikes below current price {current_price}")
+                    break
+            else:
+                logger.info(f"Page {page_count}: Retrieved {len(page_contracts)} contracts (total: {len(all_contracts)})")
+
+            # If no next_url, we're done
+            if not next_url_param:
+                break
+
+            # Safety check to prevent infinite loops
+            if page_count > 20:
+                logger.warning(f"Stopping after {page_count} pages to prevent infinite loop")
+                break
+
+        # Normalize all contracts
         normalized_contracts = []
-        for contract in contracts:
+        for contract in all_contracts:
             if not isinstance(contract, dict):
                 continue
-            
+
             normalized_contract = {
                 "ticker": contract.get("ticker") or contract.get("contract_ticker") or "",
                 "underlying_ticker": symbol,
@@ -339,11 +440,11 @@ class TradeListClient:
                 "contract_type": contract.get("contract_type") or contract.get("option_type", "").lower(),
                 "expiration_date": contract.get("expiration_date") or contract.get("expiration") or ""
             }
-            
+
             if normalized_contract["ticker"] and normalized_contract["strike_price"]:
                 normalized_contracts.append(normalized_contract)
-        
-        logger.info(f"Retrieved {len(normalized_contracts)} normalized contracts for {symbol}")
+
+        logger.info(f"Total: Retrieved {len(normalized_contracts)} normalized contracts for {symbol} across {page_count} page(s)")
         return normalized_contracts
     
     async def get_option_quote(self, option_ticker: str) -> Optional[Dict]:

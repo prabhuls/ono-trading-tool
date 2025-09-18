@@ -1222,60 +1222,171 @@ class TheTradeListService(ExternalAPIService):
         self,
         underlying_ticker: str,
         expiration_date: Optional[str] = None,
-        limit: int = 1000
+        limit: int = 1000,
+        fetch_all: bool = False,  # Default to optimized fetching for SPX
+        current_price: Optional[float] = None,
+        target_strikes_around_price: int = 60  # Get 60 strikes below price for SPX (we get all above automatically with DESC sort)
     ) -> Dict[str, Any]:
         """
-        Get options contracts for a specific underlying ticker
-        
+        Get options contracts for a specific underlying ticker with pagination support
+
         SPX options work directly with the options-contracts endpoint using "SPX" ticker.
-        No special handling or routing required.
-        
+        Handles pagination when there are more than 1000 contracts with smart early exit.
+
         Args:
             underlying_ticker: The stock symbol (e.g., "SPY", "SPX")
             expiration_date: Optional specific expiration date filter (YYYY-MM-DD)
-            limit: Maximum number of results (default: 1000)
-            
+            limit: Maximum number of results per page (default: 1000)
+            fetch_all: If True, fetch all contracts (old behavior). If False, use smart pagination
+            current_price: Current price for smart pagination (will fetch if not provided)
+            target_strikes_around_price: Number of strikes to fetch around current price
+
         Returns:
-            Dictionary containing options contracts data
-            
+            Dictionary containing all options contracts data
+
         Raises:
             ExternalAPIError: On API errors
         """
         endpoint = "/v1/data/options-contracts"
-        params = {
-            "underlying_ticker": underlying_ticker.upper(),  # SPX works directly
-            "limit": limit
-        }
-        
+
+        # Increase timeout for SPX as it may have multiple pages
+        original_timeout = self.timeout
+        if underlying_ticker.upper() == "SPX":
+            self.timeout = 120  # 2 minutes for SPX
+
+        # For SPX, default to smart pagination unless explicitly requested otherwise
+        if underlying_ticker.upper() == "SPX" and not fetch_all and current_price is None:
+            # Try to get current price for smart pagination
+            try:
+                price_data = await self.get_stock_price(underlying_ticker)
+                current_price = price_data.get("price")
+                if current_price:
+                    logger.info(f"Using current {underlying_ticker} price {current_price} for smart pagination")
+                else:
+                    # If we can't get the current price, we must fetch all
+                    logger.warning(f"Could not get current price for {underlying_ticker}, will fetch all contracts")
+                    fetch_all = True
+            except Exception as e:
+                logger.warning(f"Error fetching current price for {underlying_ticker}: {e}, will fetch all contracts")
+                fetch_all = True
+
+        all_results = []
+        page_count = 0
+        next_url = None
+        passed_current_price = False
+        unique_strikes_above = set()
+        unique_strikes_below = set()
+
         try:
             logger.info(
-                "Fetching options contracts",
+                "Fetching options contracts (with smart pagination)",
                 underlying_ticker=underlying_ticker.upper(),
                 expiration_date=expiration_date,
                 limit=limit,
+                fetch_all=fetch_all,
+                current_price=current_price,
                 endpoint=endpoint
             )
-            
-            raw_data = await self.get(endpoint, params=params, use_cache=True, cache_ttl=300)  # Cache for 5 minutes
-            
+
+            while True:
+                page_count += 1
+
+                # Build params for this request
+                params = {
+                    "underlying_ticker": underlying_ticker.upper(),
+                    "limit": limit,
+                    "sort": "strike_price",  # Sort by strike price
+                    "order": "desc"  # Descending order (highest strikes first)
+                }
+
+                # Add next_url parameter if we have it from previous response
+                if next_url:
+                    params["next_url"] = next_url
+
+                if page_count > 1:
+                    logger.info(f"Fetching page {page_count} for {underlying_ticker.upper()} options...")
+
+                # Make the request
+                raw_data = await self.get(
+                    endpoint,
+                    params=params,
+                    use_cache=(page_count == 1),  # Only cache first page
+                    cache_ttl=300
+                )
+
+                # Extract results from this page
+                page_results = raw_data.get("results", [])
+                all_results.extend(page_results)
+
+                # Smart pagination logic for SPX
+                if underlying_ticker.upper() == "SPX" and not fetch_all and current_price:
+                    # Track unique strikes above and below current price
+                    # Since we're sorting DESC, we get highest strikes first
+                    for contract in page_results:
+                        strike = float(contract.get('strike_price', 0))
+                        if strike > current_price:
+                            unique_strikes_above.add(strike)
+                        elif strike < current_price:
+                            unique_strikes_below.add(strike)
+                            passed_current_price = True  # We've passed the current price
+
+                    logger.info(
+                        f"Page {page_count}: Retrieved {len(page_results)} contracts, "
+                        f"unique strikes above {current_price}: {len(unique_strikes_above)}, "
+                        f"unique strikes below: {len(unique_strikes_below)} (total: {len(all_results)})"
+                    )
+
+                    # Exit early if we have enough strikes below current price
+                    # Since we're sorting DESC (highest first), once we pass current price and have enough strikes below,
+                    # we already have ALL strikes above the current price
+                    if passed_current_price and len(unique_strikes_below) >= target_strikes_around_price:
+                        logger.info(
+                            f"Early exit: Found {len(unique_strikes_above)} unique strikes above and "
+                            f"{len(unique_strikes_below)} unique strikes below price {current_price}, "
+                            f"total contracts: {len(all_results)}"
+                        )
+                        break
+                else:
+                    logger.info(
+                        f"Page {page_count}: Retrieved {len(page_results)} contracts (total: {len(all_results)})"
+                    )
+
+                # Check for next_url to continue pagination
+                next_url = raw_data.get("next_url")
+                if not next_url:
+                    break
+
+                # Safety check to prevent infinite loops
+                if page_count > 20:
+                    logger.warning(f"Stopping after {page_count} pages to prevent infinite loop")
+                    break
+
+            # Build final response with all results
+            final_data = {
+                "results": all_results,
+                "resultsCount": len(all_results),
+                "status": "OK"
+            }
+
             # Filter by expiration date if provided
-            if expiration_date and "results" in raw_data:
+            if expiration_date and all_results:
                 filtered_results = [
-                    contract for contract in raw_data.get("results", [])
+                    contract for contract in all_results
                     if contract.get("expiration_date") == expiration_date
                 ]
-                raw_data["results"] = filtered_results
-                raw_data["resultsCount"] = len(filtered_results)
-            
+                final_data["results"] = filtered_results
+                final_data["resultsCount"] = len(filtered_results)
+
             logger.info(
-                "Options contracts retrieved successfully",
+                "All options contracts retrieved successfully",
                 underlying_ticker=underlying_ticker.upper(),
-                total_contracts=len(raw_data.get("results", [])),
+                total_contracts=len(final_data.get("results", [])),
+                total_pages=page_count,
                 expiration_filter=expiration_date
             )
-            
-            return raw_data
-            
+
+            return final_data
+
         except ExternalAPIError:
             raise
         except Exception as e:
@@ -1288,6 +1399,9 @@ class TheTradeListService(ExternalAPIService):
                 message=f"Failed to get options contracts for {underlying_ticker}: {str(e)}",
                 service=self.service_name
             )
+        finally:
+            # Restore original timeout
+            self.timeout = original_timeout
 
     async def get_options_snapshot(
         self,
@@ -1518,10 +1632,31 @@ class TheTradeListService(ExternalAPIService):
         try:
             logger.info("Getting next available expiration from API", ticker=ticker)
             
-            # Get all available option contracts for the specified ticker
+            # MAJOR OPTIMIZATION: For common tickers, calculate expiration instead of fetching
+            if ticker == "SPY":
+                # SPY has daily options, just return next trading day
+                return self._calculate_next_trading_day()
+            elif ticker == "SPX":
+                # SPX has weekly options, calculate next Friday (or today if Friday)
+                from datetime import datetime, timedelta
+                import pytz
+
+                et_tz = pytz.timezone("America/New_York")
+                now = datetime.now(et_tz)
+
+                # Find next Friday (4 = Friday in weekday())
+                days_until_friday = (4 - now.weekday()) % 7
+                if days_until_friday == 0 and now.hour >= 16:  # If today is Friday after market close
+                    days_until_friday = 7  # Next Friday
+
+                next_friday = now + timedelta(days=days_until_friday)
+                return next_friday.strftime("%Y-%m-%d")
+
+            # For other tickers, fetch just first page
             contracts_data = await self.get_options_contracts(
                 underlying_ticker=ticker,
-                limit=1000
+                limit=10,  # Very small limit - we only need expiration dates
+                fetch_all=False  # Don't fetch all pages
             )
             
             results = contracts_data.get("results", [])
@@ -1683,11 +1818,38 @@ class TheTradeListService(ExternalAPIService):
                 ticker=ticker,
                 expiration_date=expiration_date
             )
-            
+
+            # Get current underlying price FIRST - this is required
+            try:
+                underlying_price_data = await self.get_stock_price(ticker)
+                current_underlying_price = underlying_price_data.get("price")
+
+                if not current_underlying_price:
+                    raise ExternalAPIError(
+                        message=f"Unable to retrieve current {ticker} price. Option chain cannot be displayed without current price.",
+                        service=self.service_name
+                    )
+
+                logger.info(f"Current {ticker} price: ${current_underlying_price:.2f}")
+
+            except ExternalAPIError:
+                # Re-raise if it's already our error
+                raise
+            except Exception as e:
+                logger.error(f"Failed to get {ticker} price for option chain", error=str(e))
+                raise ExternalAPIError(
+                    message=f"Failed to retrieve current {ticker} price: {str(e)}. Option chain requires current price.",
+                    service=self.service_name
+                )
+
             # Get options contracts - SPX works directly with options-contracts endpoint
+            # Use optimized fetching to get contracts around current price
             contracts_data = await self.get_options_contracts(
                 underlying_ticker=ticker,  # Use SPX ticker directly
-                expiration_date=expiration_date
+                expiration_date=expiration_date,
+                fetch_all=False,  # Use optimization for faster fetching
+                current_price=current_underlying_price,  # Pass the price we validated above
+                target_strikes_around_price=60  # Get 60 strikes below current price (all above are included with DESC sort)
             )
             
             logger.info(
@@ -1726,13 +1888,7 @@ class TheTradeListService(ExternalAPIService):
             )
             
             # OPTIMIZATION: Limit API calls by only fetching pricing for near-the-money contracts
-            # Get current underlying price first (single API call)
-            try:
-                underlying_price_data = await self.get_stock_price(ticker)
-                current_underlying_price = underlying_price_data.get("price", 585.0 if ticker == "SPY" else 5850.0)
-            except:
-                # Fallback prices based on ticker
-                current_underlying_price = 585.0 if ticker == "SPY" else 5850.0
+            # Current price already fetched above and validated - using current_underlying_price variable
             
             # Filter to only near-the-money contracts
             # For SPY: within $15 of current price
@@ -1781,9 +1937,21 @@ class TheTradeListService(ExternalAPIService):
             # Enhance contracts with pricing data using batch API call
             enhanced_contracts = []
 
-            # Prepare contracts for batch pricing (limit to prevent excessive data)
-            max_contracts_to_price = 50  # Increased from 20 since we're doing batch calls
-            contracts_to_price = nearby_contracts[:max_contracts_to_price]
+            # Prepare contracts for batch pricing (limit to prevent timeout)
+            # OPTIMIZATION: Reduce number of pricing calls to prevent timeout
+            # BUT: Ensure we get strikes both above AND below current price
+            max_contracts_to_price = 20  # Reduced to prevent timeout - prioritize speed over completeness
+
+            # Split contracts into above and below current price
+            contracts_above = [c for c in nearby_contracts if float(c.get("strike_price", 0)) > current_underlying_price]
+            contracts_below = [c for c in nearby_contracts if float(c.get("strike_price", 0)) <= current_underlying_price]
+
+            # Take 10 from each side to ensure balance
+            contracts_to_price = (contracts_above[:10] + contracts_below[:10])[:max_contracts_to_price]
+
+            # If we have fewer than expected, use all available
+            if len(contracts_to_price) < max_contracts_to_price:
+                contracts_to_price = nearby_contracts[:max_contracts_to_price]
 
             # Extract option tickers for batch call
             option_tickers = [contract.get("ticker") for contract in contracts_to_price if contract.get("ticker")]
@@ -1807,6 +1975,7 @@ class TheTradeListService(ExternalAPIService):
                     )
 
                     # Process each contract with its pricing data
+                    # DON'T deduplicate here - the algorithm needs all contracts to select from
                     for contract in contracts_to_price:
                         option_ticker = contract.get("ticker")
                         if not option_ticker or option_ticker not in pricing_map:

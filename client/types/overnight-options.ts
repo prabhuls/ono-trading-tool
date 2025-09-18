@@ -34,6 +34,7 @@ export interface OptionChainData {
   openInterest: number;
   impliedVolatility: number;
   isHighlighted?: 'buy' | 'sell' | null;
+  contract_ticker?: string;  // Unique contract ticker for React key
 }
 
 export interface ChartTimeInterval {

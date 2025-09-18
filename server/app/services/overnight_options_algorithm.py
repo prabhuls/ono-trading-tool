@@ -339,6 +339,8 @@ class OvernightOptionsAlgorithm:
                     "sell_strike": sell_strike,
                     "buy_contract": buy_contract,
                     "sell_contract": sell_contract,
+                    "buy_contract_ticker": buy_contract.get("contract_ticker"),  # Track specific contract
+                    "sell_contract_ticker": sell_contract.get("contract_ticker"),  # Track specific contract
                     "spread_cost": round(spread_cost, 2),
                     **metrics
                 }
@@ -407,40 +409,42 @@ class OvernightOptionsAlgorithm:
         return optimal_spread
     
     def apply_highlighting_to_contracts(
-        self, 
-        contracts: List[Dict[str, Any]], 
+        self,
+        contracts: List[Dict[str, Any]],
         optimal_spread: Optional[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """
         Apply BUY/SELL highlighting to contracts based on optimal spread
-        
+
         Args:
             contracts: List of option contracts
             optimal_spread: Selected optimal spread (or None)
-            
+
         Returns:
             List of contracts with highlighting applied
         """
         highlighted_contracts = []
-        
+
         for contract in contracts:
-            strike = float(contract.get("strike", 0))
+            contract_ticker = contract.get("contract_ticker")
             highlighted_contract = contract.copy()
-            
+
             # Default: no highlighting
             highlighted_contract["is_highlighted"] = None
-            
+
             if optimal_spread:
-                buy_strike = optimal_spread["buy_strike"]
-                sell_strike = optimal_spread["sell_strike"]
-                
-                if strike == buy_strike:
+                # Use specific contract tickers to highlight only the selected contracts
+                buy_contract_ticker = optimal_spread.get("buy_contract_ticker")
+                sell_contract_ticker = optimal_spread.get("sell_contract_ticker")
+
+                # Match by contract ticker for precise highlighting
+                if contract_ticker and contract_ticker == buy_contract_ticker:
                     highlighted_contract["is_highlighted"] = "buy"
-                elif strike == sell_strike:
+                elif contract_ticker and contract_ticker == sell_contract_ticker:
                     highlighted_contract["is_highlighted"] = "sell"
-            
+
             highlighted_contracts.append(highlighted_contract)
-        
+
         return highlighted_contracts
     
     async def run_algorithm(
