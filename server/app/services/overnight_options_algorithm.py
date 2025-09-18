@@ -67,28 +67,49 @@ class OvernightOptionsAlgorithm:
     def calculate_spread_cost(self, buy_option: Dict[str, Any], sell_option: Dict[str, Any], ticker: str = "SPY") -> float:
         """
         Calculate the actual cost of a spread
-        
+
         SPY: $1-wide spreads, SPX: $5-wide spreads (scaled appropriately)
         Formula: Buy Ask - Sell Bid (the actual debit paid)
-        
+
         Args:
             buy_option: Lower strike option to buy (more expensive)
             sell_option: Higher strike option to sell (less expensive)
             ticker: Underlying ticker for spread width determination
-            
+
         Returns:
             Spread cost as float
         """
         try:
             buy_ask = float(buy_option.get("ask", 0))
             sell_bid = float(sell_option.get("bid", 0))
-            
+
             # Calculate actual spread cost (debit paid)
             spread_cost = buy_ask - sell_bid
-            
+
+            # Apply minimum spread cost validation
+            # SPX spreads should cost at least $1.50 (30% of $5 width)
+            # SPY spreads should cost at least $0.30 (30% of $1 width)
+            min_spread_cost = 1.50 if ticker == "SPX" else 0.30
+
+            if spread_cost > 0 and spread_cost < min_spread_cost:
+                logger.warning(
+                    "Spread cost below minimum threshold - likely pricing data issue",
+                    ticker=ticker,
+                    buy_strike=buy_option.get("strike"),
+                    sell_strike=sell_option.get("strike"),
+                    calculated_cost=spread_cost,
+                    min_cost=min_spread_cost,
+                    buy_ask=buy_ask,
+                    sell_bid=sell_bid,
+                    buy_ticker=buy_option.get("contract_ticker"),
+                    sell_ticker=sell_option.get("contract_ticker")
+                )
+                # Return 0 to invalidate this spread
+                return 0.0
+
             # Ensure cost is not negative
             return max(0.0, spread_cost)
-            
+
         except (ValueError, TypeError) as e:
             logger.warning(
                 "Failed to calculate spread cost",
@@ -101,11 +122,11 @@ class OvernightOptionsAlgorithm:
     def calculate_spread_metrics(self, spread_cost: float, ticker: str = "SPY") -> Dict[str, float]:
         """
         Calculate risk/reward metrics for a spread
-        
+
         Args:
             spread_cost: Cost of the spread
             ticker: Underlying ticker for spread width determination
-            
+
         Returns:
             Dictionary with max_reward, max_risk, roi_potential, profit_target
         """
@@ -114,8 +135,22 @@ class OvernightOptionsAlgorithm:
         max_reward = max_value - spread_cost
         max_risk = spread_cost
         roi_potential = (max_reward / spread_cost * 100) if spread_cost > 0 else 0
+
+        # Apply ROI sanity check - max 200% (2:1 reward/risk)
+        if roi_potential > 200:
+            logger.warning(
+                "ROI exceeds realistic threshold - likely pricing data issue",
+                ticker=ticker,
+                spread_cost=spread_cost,
+                max_reward=max_reward,
+                calculated_roi=roi_potential,
+                max_allowed_roi=200
+            )
+            # Cap ROI at 200% for display purposes
+            roi_potential = 200.0
+
         profit_target = spread_cost * 1.20  # 20% profit target
-        
+
         return {
             "max_reward": round(max_reward, 2),
             "max_risk": round(max_risk, 2),
@@ -271,15 +306,41 @@ class OvernightOptionsAlgorithm:
         
         for i, buy_contract in enumerate(sorted_contracts):
             buy_strike = float(buy_contract.get("strike", 0))
-            
+            buy_ticker = buy_contract.get("contract_ticker", "")
+
+            # Extract series type from contract ticker for SPX (SPX or SPXW)
+            buy_series = ""
+            if ticker == "SPX":
+                if "SPX250" in buy_ticker and "SPXW" not in buy_ticker:
+                    buy_series = "SPX"
+                elif "SPXW250" in buy_ticker:
+                    buy_series = "SPXW"
+
             # Find the sell contract (strike = buy_strike + spread_width)
             sell_strike = buy_strike + spread_width
             sell_contract = None
-            
+
+            # Collect all candidates with matching strike
+            candidates = []
             for sell_candidate in sorted_contracts[i+1:]:
                 if float(sell_candidate.get("strike", 0)) == sell_strike:
-                    sell_contract = sell_candidate
-                    break
+                    candidates.append(sell_candidate)
+
+            # For SPX, prefer contracts from the same series
+            if ticker == "SPX" and buy_series and len(candidates) > 1:
+                # Try to find same series contract
+                for candidate in candidates:
+                    sell_ticker = candidate.get("contract_ticker", "")
+                    if buy_series == "SPX" and "SPX250" in sell_ticker and "SPXW" not in sell_ticker:
+                        sell_contract = candidate
+                        break
+                    elif buy_series == "SPXW" and "SPXW250" in sell_ticker:
+                        sell_contract = candidate
+                        break
+
+            # If no same-series match or not SPX, take first candidate
+            if not sell_contract and candidates:
+                sell_contract = candidates[0]
             
             spreads_attempted += 1
             
