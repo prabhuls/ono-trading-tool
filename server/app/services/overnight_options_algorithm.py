@@ -86,28 +86,7 @@ class OvernightOptionsAlgorithm:
             # Calculate actual spread cost (debit paid)
             spread_cost = buy_ask - sell_bid
 
-            # Apply minimum spread cost validation
-            # SPX spreads should cost at least $1.50 (30% of $5 width)
-            # SPY spreads should cost at least $0.30 (30% of $1 width)
-            min_spread_cost = 1.50 if ticker == "SPX" else 0.30
-
-            if spread_cost > 0 and spread_cost < min_spread_cost:
-                logger.warning(
-                    "Spread cost below minimum threshold - likely pricing data issue",
-                    ticker=ticker,
-                    buy_strike=buy_option.get("strike"),
-                    sell_strike=sell_option.get("strike"),
-                    calculated_cost=spread_cost,
-                    min_cost=min_spread_cost,
-                    buy_ask=buy_ask,
-                    sell_bid=sell_bid,
-                    buy_ticker=buy_option.get("contract_ticker"),
-                    sell_ticker=sell_option.get("contract_ticker")
-                )
-                # Return 0 to invalidate this spread
-                return 0.0
-
-            # Ensure cost is not negative
+            # Ensure cost is not negative (which would be invalid)
             return max(0.0, spread_cost)
 
         except (ValueError, TypeError) as e:

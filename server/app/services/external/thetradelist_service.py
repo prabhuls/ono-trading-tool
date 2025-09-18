@@ -1556,13 +1556,8 @@ class TheTradeListService(ExternalAPIService):
                 bid = last_quote.get("bid", 0) if last_quote else 0
                 ask = last_quote.get("ask", 0) if last_quote else 0
 
-                # If no quote data, try to use last trade
-                if bid == 0 and ask == 0 and last_trade:
-                    last_price = last_trade.get("price", 0)
-                    if last_price > 0:
-                        # Use last trade price as midpoint
-                        bid = last_price * 0.98  # Estimate bid as 2% below last
-                        ask = last_price * 1.02  # Estimate ask as 2% above last
+                # Only use actual quote data, don't estimate from last trade
+                # If no quote data is available, the contract will be skipped
 
                 return {
                     "bid": bid,
