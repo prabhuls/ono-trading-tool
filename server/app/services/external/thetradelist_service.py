@@ -1305,7 +1305,7 @@ class TheTradeListService(ExternalAPIService):
         limit: int = 1000,
         fetch_all: bool = False,  # Default to optimized fetching for SPX
         current_price: Optional[float] = None,
-        target_strikes_around_price: int = 30  # Get 30 strikes below price for SPX (we get all above automatically with DESC sort)
+        target_strikes_around_price: int = 30  # Target number of strikes around current price for analysis
     ) -> Dict[str, Any]:
         """
         Get options contracts for a specific underlying ticker with pagination support
@@ -1375,9 +1375,12 @@ class TheTradeListService(ExternalAPIService):
                 params = {
                     "underlying_ticker": underlying_ticker.upper(),
                     "limit": limit,
-                    "sort": "strike_price",  # Sort by strike price
-                    "order": "desc"  # Descending order (highest strikes first)
+                    "sort": "expiration_date",  # Sort by expiration date to get nearest expirations first
+                    "order": "asc"  # Ascending order (nearest expirations first)
                 }
+
+                # Note: expiration_date parameter is not supported by the API
+                # We'll filter results after fetching instead
 
                 # Add next_url parameter if we have it from previous response
                 if next_url:
@@ -1396,45 +1399,60 @@ class TheTradeListService(ExternalAPIService):
 
                 # Extract results from this page
                 page_results = raw_data.get("results", [])
-                all_results.extend(page_results)
 
-                # Smart pagination logic for SPX
-                if underlying_ticker.upper() == "SPX" and not fetch_all and current_price:
-                    # Track unique strikes above and below current price
-                    # Since we're sorting DESC, we get highest strikes first
+                # Smart pagination logic - collect ALL contracts for target expiration
+                if expiration_date and not fetch_all:
+                    found_target_date = False
+                    passed_target_date = False
+                    target_date_contracts_in_page = []
+
                     for contract in page_results:
-                        strike = float(contract.get('strike_price', 0))
-                        if strike > current_price:
-                            unique_strikes_above.add(strike)
-                        elif strike < current_price:
-                            unique_strikes_below.add(strike)
-                            passed_current_price = True  # We've passed the current price
+                        contract_exp = contract.get('expiration_date')
+
+                        if contract_exp == expiration_date:
+                            found_target_date = True
+                            target_date_contracts_in_page.append(contract)
+                            all_results.append(contract)  # Only add target date contracts
+
+                            # Track strikes for the target date
+                            if current_price:
+                                strike = float(contract.get('strike_price', 0))
+                                if strike > current_price:
+                                    unique_strikes_above.add(strike)
+                                elif strike < current_price:
+                                    unique_strikes_below.add(strike)
+
+                        elif contract_exp and contract_exp > expiration_date:
+                            # We've moved past our target date
+                            passed_target_date = True
+                            # Don't add these contracts to results
+                        elif contract_exp and contract_exp < expiration_date:
+                            # Haven't reached target date yet, skip these
+                            continue
 
                     logger.info(
-                        f"Page {page_count}: Retrieved {len(page_results)} contracts, "
-                        f"unique strikes above {current_price}: {len(unique_strikes_above)}, "
-                        f"unique strikes below: {len(unique_strikes_below)} (total: {len(all_results)})"
+                        f"Page {page_count}: Processed {len(page_results)} contracts, "
+                        f"found {len(target_date_contracts_in_page)} for {expiration_date}, "
+                        f"strikes above: {len(unique_strikes_above)}, below: {len(unique_strikes_below)} "
+                        f"(total for date: {len(all_results)})"
                     )
 
-                    # Exit early if we have enough strikes below current price
-                    # Since we're sorting DESC (highest first), once we pass current price and have enough strikes below,
-                    # we already have ALL strikes above the current price
-                    # For SPX, exit more aggressively to avoid timeouts
-                    if underlying_ticker == "SPX" and passed_current_price and len(unique_strikes_below) >= min(target_strikes_around_price, 20):
+                    # Continue fetching if:
+                    # - We haven't found the target date yet, OR
+                    # - We found it but haven't passed it yet (more contracts might be on next page)
+                    # Stop when we've passed the target date
+                    if passed_target_date and found_target_date:
                         logger.info(
-                            f"SPX early exit: Found {len(unique_strikes_above)} unique strikes above and "
-                            f"{len(unique_strikes_below)} unique strikes below price {current_price}, "
-                            f"total contracts: {len(all_results)}"
+                            f"Collected all contracts for {expiration_date}: "
+                            f"{len(all_results)} contracts with {len(unique_strikes_above) + len(unique_strikes_below)} unique strikes"
                         )
                         break
-                    elif passed_current_price and len(unique_strikes_below) >= target_strikes_around_price:
-                        logger.info(
-                            f"Early exit: Found {len(unique_strikes_above)} unique strikes above and "
-                            f"{len(unique_strikes_below)} unique strikes below price {current_price}, "
-                            f"total contracts: {len(all_results)}"
-                        )
+                    elif not found_target_date and page_count > 10:
+                        logger.warning(f"Target date {expiration_date} not found after {page_count} pages")
                         break
                 else:
+                    # No expiration filter - add all contracts
+                    all_results.extend(page_results)
                     logger.info(
                         f"Page {page_count}: Retrieved {len(page_results)} contracts (total: {len(all_results)})"
                     )
@@ -1920,7 +1938,7 @@ class TheTradeListService(ExternalAPIService):
                 expiration_date=expiration_date,
                 fetch_all=False,  # Use optimization for faster fetching
                 current_price=current_underlying_price,  # Pass the price we validated above
-                target_strikes_around_price=30  # Get 30 strikes below current price (all above are included with DESC sort)
+                target_strikes_around_price=30  # Target strikes around current price for analysis
             )
             
             logger.info(
@@ -2008,21 +2026,47 @@ class TheTradeListService(ExternalAPIService):
             # Enhance contracts with pricing data using batch API call
             enhanced_contracts = []
 
-            # Prepare contracts for batch pricing (limit to prevent timeout)
-            # OPTIMIZATION: Reduce number of pricing calls to prevent timeout
-            # BUT: Ensure we get strikes both above AND below current price
-            max_contracts_to_price = 20  # Reduced to prevent timeout - prioritize speed over completeness
+            # Prepare contracts for batch pricing
+            # Use ticker-specific limits to balance performance and completeness
+            # Since we're already filtering to single expiration date, we need to be selective
+            if ticker == "SPY":
+                max_contracts_to_price = 60  # SPY - reduced for faster processing
+            else:  # SPX
+                max_contracts_to_price = 40  # SPX - aggressive limit to avoid timeouts
 
-            # Split contracts into above and below current price
-            contracts_above = [c for c in nearby_contracts if float(c.get("strike_price", 0)) > current_underlying_price]
-            contracts_below = [c for c in nearby_contracts if float(c.get("strike_price", 0)) <= current_underlying_price]
+            # For deepest ITM spread selection, prioritize ITM contracts (below current price)
+            contracts_itm = [c for c in nearby_contracts if float(c.get("strike_price", 0)) < current_underlying_price]
+            contracts_atm_otm = [c for c in nearby_contracts if float(c.get("strike_price", 0)) >= current_underlying_price]
 
-            # Take 10 from each side to ensure balance
-            contracts_to_price = (contracts_above[:10] + contracts_below[:10])[:max_contracts_to_price]
+            # For spread calculation, we need contracts that are close enough to form valid spreads
+            # SPY: $1 spreads, SPX: $5 spreads
+            spread_width = 1.0 if ticker == "SPY" else 5.0
 
-            # If we have fewer than expected, use all available
-            if len(contracts_to_price) < max_contracts_to_price:
-                contracts_to_price = nearby_contracts[:max_contracts_to_price]
+            # Focus on ITM contracts that can form valid spreads
+            # Sort ITM by strike (highest first - closest to current price)
+            contracts_itm = sorted(contracts_itm, key=lambda x: float(x.get("strike_price", 0)), reverse=True)
+
+            # Take enough ITM contracts to form spreads but not too many to timeout
+            if ticker == "SPY":
+                contracts_itm = contracts_itm[:40]  # Top 40 ITM strikes for SPY
+            else:  # SPX
+                contracts_itm = contracts_itm[:30]  # Top 30 ITM strikes for SPX
+
+            # Include a few ATM/OTM for completeness
+            contracts_to_price = contracts_itm + contracts_atm_otm[:min(10, len(contracts_atm_otm))]
+
+            # Limit to max contracts to prevent timeout
+            contracts_to_price = contracts_to_price[:max_contracts_to_price]
+
+            # Log contract selection details
+            logger.info(
+                "Contract selection for pricing",
+                ticker=ticker,
+                itm_contracts=len(contracts_itm),
+                atm_otm_contracts=len(contracts_atm_otm),
+                contracts_to_price=len(contracts_to_price),
+                max_allowed=max_contracts_to_price
+            )
 
             # Extract option tickers for batch call
             option_tickers = [contract.get("ticker") for contract in contracts_to_price if contract.get("ticker")]
