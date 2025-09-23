@@ -66,10 +66,11 @@ class OvernightOptionsAlgorithm:
     
     def calculate_spread_cost(self, buy_option: Dict[str, Any], sell_option: Dict[str, Any], ticker: str = "SPY") -> float:
         """
-        Calculate the midPrice cost of a spread
+        Calculate the cost of a spread using mid-market pricing
 
         SPY: $1-wide spreads, SPX: $5-wide spreads (scaled appropriately)
-        Formula: (Buy Ask - Sell Bid) / 2 (the midPrice as per PROJECT_REQUIREMENTS.md)
+        Formula: spread_cost = buy_mid - sell_mid
+        Where mid = (ask + bid) / 2 for each option
 
         Args:
             buy_option: Lower strike option to buy (more expensive)
@@ -77,16 +78,23 @@ class OvernightOptionsAlgorithm:
             ticker: Underlying ticker for spread width determination
 
         Returns:
-            Spread midPrice cost as float
+            Spread cost using mid-market pricing as float
         """
         try:
+            # Calculate mid-market price for buy option (lower strike)
+            buy_bid = float(buy_option.get("bid", 0))
             buy_ask = float(buy_option.get("ask", 0))
+            buy_mid = (buy_ask + buy_bid) / 2
+
+            # Calculate mid-market price for sell option (higher strike)
             sell_bid = float(sell_option.get("bid", 0))
+            sell_ask = float(sell_option.get("ask", 0))
+            sell_mid = (sell_ask + sell_bid) / 2
 
-            # Calculate midPrice spread cost as per requirements
-            spread_cost = (buy_ask - sell_bid) / 2
+            # Calculate spread cost as difference between mid prices
+            spread_cost = buy_mid - sell_mid
 
-            # Ensure cost is not negative (which would be invalid)
+            # Ensure cost is not negative (which would be invalid for a debit spread)
             return max(0.0, spread_cost)
 
         except (ValueError, TypeError) as e:

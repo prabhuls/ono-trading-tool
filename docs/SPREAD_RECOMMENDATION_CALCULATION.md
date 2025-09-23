@@ -87,14 +87,16 @@ For each pair of ITM strikes, the system constructs $1-wide spreads (SPY) or $5-
 buy_strike = lower_strike  # Deeper ITM (more expensive)
 sell_strike = higher_strike # Less ITM (less expensive)
 
-# Calculate midPrice spread cost (as per PROJECT_REQUIREMENTS.md):
-spread_cost = (buy_option.ask - sell_option.bid) / 2
+# Calculate spread cost using mid-market pricing:
+buy_mid = (buy_option.ask + buy_option.bid) / 2
+sell_mid = (sell_option.ask + sell_option.bid) / 2
+spread_cost = buy_mid - sell_mid
 ```
 
-**Important:** The midPrice calculation uses:
-- **Buy leg**: ASK price (what you pay)
-- **Sell leg**: BID price (what you receive)
-- **Divided by 2**: To get the midpoint price for fair valuation
+**Important:** The spread cost calculation uses:
+- **Buy leg mid-market price**: (ASK + BID) / 2
+- **Sell leg mid-market price**: (ASK + BID) / 2
+- **Spread cost**: Difference between the two mid-market prices
 
 ### Step 4: Cost Filtering
 
@@ -145,12 +147,12 @@ best_spread = min(qualifying_spreads, key=lambda x: x.sell_strike)
 
 Given these qualifying spreads for SPY at $585.18:
 
-| Spread | Cost (MidPrice) | Sell Strike | Selection |
-|--------|-----------------|------------|-----------|
-| 578/579 | $0.355 | $579 | ← **SELECTED** (Deepest ITM) |
-| 579/580 | $0.340 | $580 | |
-| 580/581 | $0.365 | $581 | |
-| 581/582 | $0.350 | $582 | |
+| Spread | Cost (Mid-Market) | Sell Strike | Selection |
+|--------|-------------------|------------|-----------|
+| 578/579 | $0.58 | $579 | ← **SELECTED** (Deepest ITM) |
+| 579/580 | $0.55 | $580 | |
+| 580/581 | $0.59 | $581 | |
+| 581/582 | $0.57 | $582 | |
 
 The 578/579 spread wins despite not being the cheapest, because the $579 sell strike is the furthest below current price.
 
@@ -201,33 +203,32 @@ For each spread, using actual bid-ask quotes:
 - Bid: **$6.64** ← Use BID for selling
 - Ask: **$6.75**
 
-**Spread Cost Calculation (MidPrice):**
+**Spread Cost Calculation (Mid-Market Pricing):**
 ```
-Spread Cost = (Buy Ask - Sell Bid) / 2
-           = ($7.35 - $6.64) / 2
-           = $0.71 / 2
-           = $0.355
+Buy Mid = (Buy Ask + Buy Bid) / 2 = ($7.35 + $7.20) / 2 = $7.275
+Sell Mid = (Sell Ask + Sell Bid) / 2 = ($6.75 + $6.64) / 2 = $6.695
+Spread Cost = Buy Mid - Sell Mid = $7.275 - $6.695 = $0.58
 ```
 
 ### Step 4: Cost Filtering Results
 
-| Spread | Cost (MidPrice) | Qualifies? |
-|---------|-----------------|------------|
-| 578/579 | $0.355 | ✓ Yes |
-| 579/580 | $0.340 | ✓ Yes |
-| 580/581 | $0.365 | ✓ Yes |
-| 581/582 | $0.350 | ✓ Yes |
-| 582/583 | $0.380 | ✓ Yes |
+| Spread | Cost (Mid-Market) | Qualifies? |
+|---------|-------------------|------------|
+| 578/579 | $0.58 | ✓ Yes |
+| 579/580 | $0.55 | ✓ Yes |
+| 580/581 | $0.59 | ✓ Yes |
+| 581/582 | $0.57 | ✓ Yes |
+| 582/583 | $0.62 | ✓ Yes |
 
 ### Step 5: Metrics for Selected Spread (578/579)
 
 ```
-Spread Cost (MidPrice) = $0.355
+Spread Cost (Mid-Market) = $0.58
 Max Value = $1.00 (spread width)
-Max Reward = $1.00 - $0.355 = $0.645
-Max Risk = $0.355
-ROI Potential = ($0.645 / $0.355) × 100 = 181.7%
-Profit Target = $0.355 × 1.20 = $0.426 (20% gain)
+Max Reward = $1.00 - $0.58 = $0.42
+Max Risk = $0.58
+ROI Potential = ($0.42 / $0.58) × 100 = 72.4%
+Profit Target = $0.58 × 1.20 = $0.696 (20% gain)
 Target ROI = 20%
 ```
 
@@ -236,21 +237,21 @@ Target ROI = 20%
 The 578/579 spread is selected because:
 - **Lowest sell strike** ($579) among qualifying spreads
 - **Deepest ITM** position (furthest below current price)
-- **Cost within limit** ($0.355 < $0.74)
-- **Favorable ROI** (181.7% potential)
+- **Cost within limit** ($0.58 < $0.74)
+- **Favorable ROI** (72.4% potential)
 
 ### Profit/Loss Scenarios at Expiration
 
 | SPY Price | Spread Value | Profit/Loss | Result |
 |-----------|--------------|-------------|---------|
-| $580+ | $1.00 | +$0.645 | **Maximum profit** (181.7% ROI) |
-| $579.50 | $0.50 | +$0.145 | Partial profit |
-| $579.355 | $0.355 | $0.00 | **Breakeven** |
-| $579.00 | $0.00 | -$0.355 | **Maximum loss** (100% of cost) |
-| $578.50 | $0.00 | -$0.355 | Maximum loss |
-| $578.00 | $0.00 | -$0.355 | Maximum loss |
+| $580+ | $1.00 | +$0.42 | **Maximum profit** (72.4% ROI) |
+| $579.75 | $0.75 | +$0.17 | Partial profit |
+| $579.58 | $0.58 | $0.00 | **Breakeven** |
+| $579.00 | $0.00 | -$0.58 | **Maximum loss** (100% of cost) |
+| $578.50 | $0.00 | -$0.58 | Maximum loss |
+| $578.00 | $0.00 | -$0.58 | Maximum loss |
 
-**Breakeven:** SPY at $579.355 (sell strike + midPrice cost)
+**Breakeven:** SPY at $579.58 (sell strike + spread cost)
 
 ---
 
@@ -273,11 +274,11 @@ The 578/579 spread is selected because:
 ### Exit Strategy
 The recommended approach for overnight holds:
 1. **Hold to expiration** for next-day options (most common)
-2. **Early exit at profit target** (20% gain = $0.426 for $0.355 cost)
+2. **Early exit at profit target** (20% gain = $0.696 for $0.58 cost)
 3. **Stop loss** if spread value drops below 50% of cost
 
 ### Risk Controls
-- **Maximum loss**: Limited to spread cost (e.g., $0.355)
+- **Maximum loss**: Limited to spread cost (e.g., $0.58)
 - **No naked options**: All positions are spread (defined risk)
 - **Deep ITM selection**: Higher probability of profit
 - **Cost filtering**: Ensures favorable risk-reward ratio
@@ -290,7 +291,7 @@ The Overnight Options spread recommendation system implements a sophisticated al
 
 1. **Filters to ITM strikes only** (below current price for calls)
 2. **Constructs $1-wide spreads** (SPY) or $5-wide spreads (SPX)
-3. **Uses midPrice calculation** ((Buy Ask - Sell Bid) / 2)
+3. **Uses mid-market pricing** (buy_mid - sell_mid)
 4. **Applies strict cost filtering** (maximum $0.74)
 5. **Selects deepest ITM spread** (lowest sell strike)
 
