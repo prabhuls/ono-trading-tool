@@ -435,26 +435,22 @@ class OvernightOptionsAlgorithm:
         
         return qualifying_spreads
     
-    def select_optimal_spread(self, qualifying_spreads: List[Dict[str, Any]], current_price: Optional[float] = None) -> Optional[Dict[str, Any]]:
+    def select_optimal_spread(self, qualifying_spreads: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """
-        Select the optimal spread (closest to current price for better fill probability)
+        Select the optimal spread (deepest ITM for best risk management as per requirements)
 
         Args:
             qualifying_spreads: List of qualifying spreads
-            current_price: Current underlying price for proximity calculation
 
         Returns:
-            Optimal spread or None if no spreads qualify
+            Optimal spread (deepest ITM) or None if no spreads qualify
         """
         if not qualifying_spreads:
             return None
 
-        # If current price is provided, select spread closest to current price
-        # Otherwise fall back to deepest ITM (lowest sell strike)
-        if current_price:
-            optimal_spread = min(qualifying_spreads, key=lambda x: abs(x["sell_strike"] - current_price))
-        else:
-            optimal_spread = min(qualifying_spreads, key=lambda x: x["sell_strike"])
+        # Always select deepest ITM (lowest sell strike) as per project requirements
+        # This provides the best risk management and highest probability of success
+        optimal_spread = min(qualifying_spreads, key=lambda x: x["sell_strike"])
         
         logger.info(
             "Optimal spread selected",
@@ -548,8 +544,8 @@ class OvernightOptionsAlgorithm:
             # Step 4: Find qualifying spreads (width varies by ticker)
             qualifying_spreads = self.find_qualifying_spreads(itm_contracts, ticker, current_price)
 
-            # Step 5: Select optimal spread (closest to current price)
-            optimal_spread = self.select_optimal_spread(qualifying_spreads, current_price)
+            # Step 5: Select optimal spread (deepest ITM)
+            optimal_spread = self.select_optimal_spread(qualifying_spreads)
             
             # Debug logging when no spreads found
             if not optimal_spread and len(qualifying_spreads) == 0:
