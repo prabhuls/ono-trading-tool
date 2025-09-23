@@ -1684,13 +1684,13 @@ class TheTradeListService(ExternalAPIService):
     async def get_next_trading_day_expiration(self, ticker: str = "SPY") -> str:
         """
         Get the next available expiration date from API data for the specified ticker
-        
+
         For SPY: Looks for next trading day expiration (daily options)
-        For SPX: Looks for nearest available expiration (weekly/monthly options)
-        
+        For SPX: Looks for next trading day expiration (daily SPX options + weekly SPXW options)
+
         Args:
             ticker: The ticker symbol to get expiration for (e.g., "SPY", "SPX")
-        
+
         Returns:
             Next available expiration date in YYYY-MM-DD format
         """
@@ -1700,24 +1700,10 @@ class TheTradeListService(ExternalAPIService):
             logger.info("Getting next available expiration from API", ticker=ticker)
             
             # MAJOR OPTIMIZATION: For common tickers, calculate expiration instead of fetching
-            if ticker == "SPY":
-                # SPY has daily options, just return next trading day
+            if ticker in ["SPY", "SPX"]:
+                # Both SPY and SPX have daily options, return next trading day
+                # SPX has both daily (SPX) and weekly (SPXW) options available
                 return self._calculate_next_trading_day()
-            elif ticker == "SPX":
-                # SPX has weekly options, calculate next Friday (or today if Friday)
-                from datetime import datetime, timedelta
-                import pytz
-
-                et_tz = pytz.timezone("America/New_York")
-                now = datetime.now(et_tz)
-
-                # Find next Friday (4 = Friday in weekday())
-                days_until_friday = (4 - now.weekday()) % 7
-                if days_until_friday == 0 and now.hour >= 16:  # If today is Friday after market close
-                    days_until_friday = 7  # Next Friday
-
-                next_friday = now + timedelta(days=days_until_friday)
-                return next_friday.strftime("%Y-%m-%d")
 
             # For other tickers, fetch just first page
             contracts_data = await self.get_options_contracts(
