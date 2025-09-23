@@ -1034,43 +1034,115 @@ class TheTradeListService(ExternalAPIService):
                 "error": str(e)
             }
 
+    async def get_sp_prices(self) -> Dict[str, Any]:
+        """
+        Get real-time prices for SPY and SPX in a single API call
+
+        Uses the new sp-prices endpoint for efficient fetching
+
+        Returns:
+            Dictionary with SPY and SPX price data including net change info
+
+        Raises:
+            ExternalAPIError: On API errors
+        """
+        try:
+            logger.info("Fetching SP prices from sp-prices endpoint")
+
+            # Use the client from parent class
+            endpoint = "/v1/data/sp-prices"
+            params = {"apiKey": self.api_key}
+
+            # Make the request using the parent class client
+            response = await self.client.get(endpoint, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            # Parse response
+            result = {
+                "SPY": None,
+                "SPX": None,
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
+
+            for item in data.get("data", []):
+                ticker = item.get("ticker")
+                if ticker in ["SPY", "SPX"]:
+                    result[ticker] = {
+                        "ticker": ticker,
+                        "price": float(item.get("price", 0)),
+                        "net_change": float(item.get("net_change", 0)),
+                        "net_change_pct": float(item.get("net_change_pct", 0)),
+                        "timestamp": item.get("time", result["timestamp"])
+                    }
+
+            logger.info(
+                "SP prices retrieved successfully",
+                spy_price=result["SPY"]["price"] if result["SPY"] else None,
+                spx_price=result["SPX"]["price"] if result["SPX"] else None
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error("Failed to get SP prices", error=str(e))
+            raise ExternalAPIError(
+                message=f"Failed to get SP prices: {str(e)}",
+                service=self.service_name
+            )
+
     async def get_stock_price(self, ticker: str) -> Dict[str, Any]:
         """
         Get current price for a single stock ticker
-        
-        ISIN endpoint is used ONLY for SPX current price (single data point).
-        Regular snapshot endpoint is used for all other tickers and purposes.
-        
+
+        Uses sp-prices endpoint for SPY/SPX (more efficient and real-time)
+        Regular snapshot endpoint is used for other tickers
+
         Args:
             ticker: Stock ticker symbol (e.g., "SPY", "XSP", "SPX")
-            
+
         Returns:
             Stock price data with normalized format (current price only)
-            
+
         Raises:
             ExternalAPIError: On API errors or invalid ticker
         """
         # Validate ticker is one of the supported symbols
         supported_tickers = {"SPY", "XSP", "SPX"}
         ticker_upper = ticker.upper()
-        
+
         if ticker_upper not in supported_tickers:
             raise ExternalAPIError(
                 message=f"Ticker {ticker} not supported. Supported tickers: {', '.join(supported_tickers)}",
                 service=self.service_name
             )
-        
+
         try:
             logger.info("Fetching stock price", ticker=ticker_upper)
-            
-            # Route SPX to ISIN endpoint for CURRENT PRICE ONLY
-            # (ISIN only provides single price point, not time series)
-            if ticker_upper == "SPX":
-                return await self.get_spx_price_via_isin()
-            
-            # Use existing market snapshot method for SPY and XSP
+
+            # Use new sp-prices endpoint for SPY and SPX
+            if ticker_upper in ["SPY", "SPX"]:
+                sp_prices = await self.get_sp_prices()
+                ticker_data = sp_prices.get(ticker_upper)
+
+                if not ticker_data:
+                    raise ExternalAPIError(
+                        message=f"No price data found for ticker {ticker_upper}",
+                        service=self.service_name
+                    )
+
+                # Normalize to match existing format (using net_change as change)
+                return {
+                    "ticker": ticker_data["ticker"],
+                    "price": ticker_data["price"],
+                    "change": ticker_data["net_change"],
+                    "change_percent": ticker_data["net_change_pct"],
+                    "timestamp": ticker_data["timestamp"]
+                }
+
+            # Use existing market snapshot method for XSP
             snapshot_data = await self.get_market_snapshot(tickers=f"{ticker_upper},")
-            
+
             # Extract ticker data from response
             tickers = snapshot_data.get("tickers", [])
             if not tickers:
@@ -1078,20 +1150,20 @@ class TheTradeListService(ExternalAPIService):
                     message=f"No price data found for ticker {ticker_upper}",
                     service=self.service_name
                 )
-            
+
             # Find the specific ticker in the response
             ticker_data = None
             for ticker_info in tickers:
                 if isinstance(ticker_info, dict) and ticker_info.get("ticker") == ticker_upper:
                     ticker_data = ticker_info
                     break
-            
+
             if not ticker_data:
                 raise ExternalAPIError(
                     message=f"Ticker {ticker_upper} not found in API response",
                     service=self.service_name
                 )
-            
+
             # Normalize the response format
             normalized_data = {
                 "ticker": ticker_data.get("ticker", ticker_upper),
@@ -1100,16 +1172,16 @@ class TheTradeListService(ExternalAPIService):
                 "change_percent": float(ticker_data.get("change_percent", 0)),
                 "timestamp": datetime.utcnow().isoformat() + "Z"
             }
-            
+
             logger.info(
                 "Stock price retrieved successfully",
                 ticker=ticker_upper,
                 price=normalized_data["price"],
                 change=normalized_data["change"]
             )
-            
+
             return normalized_data
-            
+
         except ExternalAPIError:
             # Re-raise API errors
             raise
