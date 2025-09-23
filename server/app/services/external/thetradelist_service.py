@@ -39,13 +39,13 @@ class TheTradeListService(ExternalAPIService):
     - SPX-specific routing based on data type needed
 
     Cache Strategy:
-    - Static data (7 hours): Contract details, strikes, expirations
+    - Static data (5 seconds): Contract details, strikes, expirations
     - Dynamic data (5 seconds): Prices, quotes, volume, bid/ask
     """
 
     # Cache TTL constants
-    CACHE_TTL_STATIC = 25200  # 7 hours for static data (contract details, strikes, expirations)
-    CACHE_TTL_DYNAMIC = 5     # 5 seconds for dynamic data (prices, quotes, volume)
+    CACHE_TTL_STATIC = 5      # 5 seconds for static data (contract details, strikes, expirations)
+    CACHE_TTL_DYNAMIC = 5      # 5 seconds for dynamic data (prices, quotes, volume)
     
     def __init__(self):
         config = settings.get_external_api_config("thetradelist")
@@ -1394,7 +1394,7 @@ class TheTradeListService(ExternalAPIService):
                     endpoint,
                     params=params,
                     use_cache=(page_count == 1),  # Only cache first page
-                    cache_ttl=self.CACHE_TTL_STATIC  # Contract details don't change during trading day
+                    cache_ttl=self.CACHE_TTL_STATIC  # 5 second cache for contract data
                 )
 
                 # Extract results from this page
