@@ -16,7 +16,7 @@ from app.schemas.market_data import (
     IntradayChartResponse
 )
 from app.services.market_status_enhanced_service import get_market_status_enhanced_service
-from app.services.external.thetradelist_service import get_thetradelist_service
+from app.services.external.thetradelist_service import get_thetradelist_service, TheTradeListService
 from app.services.external.base import ExternalAPIError
 
 
@@ -273,7 +273,7 @@ async def get_current_price(
         price_data = await get_cached_or_fetch(
             cache_key,
             lambda: tradelist_service.get_stock_price(ticker),
-            ttl=30
+            ttl=TheTradeListService.CACHE_TTL_DYNAMIC
         )
         
         logger.info(
@@ -374,7 +374,7 @@ async def get_current_prices(
         prices_data = await get_cached_or_fetch(
             cache_key,
             lambda: tradelist_service.get_multiple_stock_prices(tickers),
-            ttl=30
+            ttl=TheTradeListService.CACHE_TTL_DYNAMIC
         )
         
         logger.info(
@@ -466,7 +466,7 @@ async def get_spy_price(
         price_data = await get_cached_or_fetch(
             cache_key,
             lambda: tradelist_service.get_stock_price("SPY"),
-            ttl=30
+            ttl=TheTradeListService.CACHE_TTL_DYNAMIC
         )
         
         logger.info(

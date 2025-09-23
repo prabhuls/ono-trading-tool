@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 class TheTradeListService(ExternalAPIService):
     """
     TheTradeList API integration service
-    
+
     Provides access to real-time market data including:
     - Snapshot Locale endpoint for real-time market data
     - Grouped Locale endpoint for market statistics
@@ -25,23 +25,31 @@ class TheTradeListService(ExternalAPIService):
     - Range Data endpoint for intraday chart data
     - Options Contracts endpoint for option chain data
     - ISIN endpoint for specific ticker current prices
-    
+
     SPX Data Source Strategy:
     - CURRENT PRICE: Uses ISIN endpoint (US78378X1072) for single price point
     - CHART DATA: Uses regular range-data endpoint with "SPX" ticker directly
     - OPTIONS: Uses regular options-contracts endpoint with "SPX" ticker directly
-    
+
     Features:
     - Automatic rate limiting and retry logic
     - Response caching with configurable TTL
     - Comprehensive error handling
     - Data normalization for consistent output
     - SPX-specific routing based on data type needed
+
+    Cache Strategy:
+    - Static data (7 hours): Contract details, strikes, expirations
+    - Dynamic data (30 seconds): Prices, quotes, volume, bid/ask
     """
+
+    # Cache TTL constants
+    CACHE_TTL_STATIC = 25200  # 7 hours for static data (contract details, strikes, expirations)
+    CACHE_TTL_DYNAMIC = 30    # 30 seconds for dynamic data (prices, quotes, volume)
     
     def __init__(self):
         config = settings.get_external_api_config("thetradelist")
-        
+
         super().__init__(
             service_name="thetradelist",
             base_url=config.get("base_url", "https://api.thetradelist.com"),
@@ -49,7 +57,7 @@ class TheTradeListService(ExternalAPIService):
             timeout=config.get("timeout", 10),
             max_retries=config.get("retry_count", 3),
             rate_limit=5.0,  # 5 calls per second
-            cache_ttl=config.get("cache_ttl", 30)  # 30 seconds
+            cache_ttl=config.get("cache_ttl", self.CACHE_TTL_DYNAMIC)  # Default to dynamic cache
         )
         
         if not self.api_key:
@@ -1297,7 +1305,7 @@ class TheTradeListService(ExternalAPIService):
         limit: int = 1000,
         fetch_all: bool = False,  # Default to optimized fetching for SPX
         current_price: Optional[float] = None,
-        target_strikes_around_price: int = 60  # Get 60 strikes below price for SPX (we get all above automatically with DESC sort)
+        target_strikes_around_price: int = 30  # Get 30 strikes below price for SPX (we get all above automatically with DESC sort)
     ) -> Dict[str, Any]:
         """
         Get options contracts for a specific underlying ticker with pagination support
@@ -1383,7 +1391,7 @@ class TheTradeListService(ExternalAPIService):
                     endpoint,
                     params=params,
                     use_cache=(page_count == 1),  # Only cache first page
-                    cache_ttl=300
+                    cache_ttl=self.CACHE_TTL_STATIC  # Contract details don't change during trading day
                 )
 
                 # Extract results from this page
@@ -1411,7 +1419,15 @@ class TheTradeListService(ExternalAPIService):
                     # Exit early if we have enough strikes below current price
                     # Since we're sorting DESC (highest first), once we pass current price and have enough strikes below,
                     # we already have ALL strikes above the current price
-                    if passed_current_price and len(unique_strikes_below) >= target_strikes_around_price:
+                    # For SPX, exit more aggressively to avoid timeouts
+                    if underlying_ticker == "SPX" and passed_current_price and len(unique_strikes_below) >= min(target_strikes_around_price, 20):
+                        logger.info(
+                            f"SPX early exit: Found {len(unique_strikes_above)} unique strikes above and "
+                            f"{len(unique_strikes_below)} unique strikes below price {current_price}, "
+                            f"total contracts: {len(all_results)}"
+                        )
+                        break
+                    elif passed_current_price and len(unique_strikes_below) >= target_strikes_around_price:
                         logger.info(
                             f"Early exit: Found {len(unique_strikes_above)} unique strikes above and "
                             f"{len(unique_strikes_below)} unique strikes below price {current_price}, "
@@ -1429,8 +1445,10 @@ class TheTradeListService(ExternalAPIService):
                     break
 
                 # Safety check to prevent infinite loops
-                if page_count > 20:
-                    logger.warning(f"Stopping after {page_count} pages to prevent infinite loop")
+                # More aggressive limit for SPX to prevent timeouts
+                max_pages = 10 if underlying_ticker == "SPX" else 20
+                if page_count > max_pages:
+                    logger.warning(f"Stopping after {page_count} pages (max {max_pages} for {underlying_ticker}) to prevent timeout")
                     break
 
             # Build final response with all results
@@ -1506,7 +1524,7 @@ class TheTradeListService(ExternalAPIService):
                 option_contract=option_contract
             )
             
-            raw_data = await self.get(endpoint, params=params, use_cache=True, cache_ttl=30)  # Cache for 30 seconds
+            raw_data = await self.get(endpoint, params=params, use_cache=True, cache_ttl=self.CACHE_TTL_DYNAMIC)  # Cache for 30 seconds
             
             logger.info(
                 "Option snapshot retrieved successfully",
@@ -1614,7 +1632,7 @@ class TheTradeListService(ExternalAPIService):
         }
 
         try:
-            raw_data = await self.get(endpoint, params=params, use_cache=True, cache_ttl=30)
+            raw_data = await self.get(endpoint, params=params, use_cache=True, cache_ttl=self.CACHE_TTL_DYNAMIC)
 
             if raw_data and raw_data.get("results"):
                 results = raw_data["results"]
@@ -1666,7 +1684,7 @@ class TheTradeListService(ExternalAPIService):
         try:
             logger.info("Fetching last quote", ticker=ticker)
 
-            raw_data = await self.get(endpoint, params=params, use_cache=True, cache_ttl=30)  # Cache for 30 seconds
+            raw_data = await self.get(endpoint, params=params, use_cache=True, cache_ttl=self.CACHE_TTL_DYNAMIC)  # Cache for 30 seconds
 
             logger.info("Last quote retrieved successfully", ticker=ticker)
 
@@ -1902,7 +1920,7 @@ class TheTradeListService(ExternalAPIService):
                 expiration_date=expiration_date,
                 fetch_all=False,  # Use optimization for faster fetching
                 current_price=current_underlying_price,  # Pass the price we validated above
-                target_strikes_around_price=60  # Get 60 strikes below current price (all above are included with DESC sort)
+                target_strikes_around_price=30  # Get 30 strikes below current price (all above are included with DESC sort)
             )
             
             logger.info(
