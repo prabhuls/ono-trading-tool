@@ -40,12 +40,12 @@ class TheTradeListService(ExternalAPIService):
 
     Cache Strategy:
     - Static data (7 hours): Contract details, strikes, expirations
-    - Dynamic data (30 seconds): Prices, quotes, volume, bid/ask
+    - Dynamic data (5 seconds): Prices, quotes, volume, bid/ask
     """
 
     # Cache TTL constants
     CACHE_TTL_STATIC = 25200  # 7 hours for static data (contract details, strikes, expirations)
-    CACHE_TTL_DYNAMIC = 30    # 30 seconds for dynamic data (prices, quotes, volume)
+    CACHE_TTL_DYNAMIC = 5     # 5 seconds for dynamic data (prices, quotes, volume)
     
     def __init__(self):
         config = settings.get_external_api_config("thetradelist")
@@ -1524,7 +1524,7 @@ class TheTradeListService(ExternalAPIService):
                 option_contract=option_contract
             )
             
-            raw_data = await self.get(endpoint, params=params, use_cache=True, cache_ttl=self.CACHE_TTL_DYNAMIC)  # Cache for 30 seconds
+            raw_data = await self.get(endpoint, params=params, use_cache=True, cache_ttl=self.CACHE_TTL_DYNAMIC)  # Cache for 5 seconds
             
             logger.info(
                 "Option snapshot retrieved successfully",
@@ -1684,7 +1684,7 @@ class TheTradeListService(ExternalAPIService):
         try:
             logger.info("Fetching last quote", ticker=ticker)
 
-            raw_data = await self.get(endpoint, params=params, use_cache=True, cache_ttl=self.CACHE_TTL_DYNAMIC)  # Cache for 30 seconds
+            raw_data = await self.get(endpoint, params=params, use_cache=True, cache_ttl=self.CACHE_TTL_DYNAMIC)  # Cache for 5 seconds
 
             logger.info("Last quote retrieved successfully", ticker=ticker)
 

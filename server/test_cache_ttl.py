@@ -24,7 +24,7 @@ async def test_cache_ttl():
 
     # Verify the values match requirements
     expected_static = 25200  # 7 hours
-    expected_dynamic = 30    # 30 seconds
+    expected_dynamic = 5     # 5 seconds
 
     print(f"\n✅ Verification:")
 
@@ -46,7 +46,7 @@ async def test_cache_ttl():
     print(f"  • Strike price listings")
     print(f"  • Contract metadata")
 
-    print(f"\nDynamic Data (30-second cache):")
+    print(f"\nDynamic Data (5-second cache):")
     print(f"  • Bid/ask prices")
     print(f"  • Last trade prices")
     print(f"  • Volume and open interest")
@@ -54,7 +54,7 @@ async def test_cache_ttl():
     print(f"  • Implied volatility")
 
     # Test a real endpoint to ensure caching works
-    print(f"\n🔄 Testing Price Endpoint (30-second cache):")
+    print(f"\n🔄 Testing Price Endpoint (5-second cache):")
     try:
         # First call - will fetch from API
         print("  Fetching SPY price (first call)...")
@@ -86,7 +86,7 @@ async def test_cache_ttl():
     if all_correct:
         print("\n🎉 All cache TTL settings are configured correctly!")
         print("  • Static data cached for 7 hours")
-        print("  • Dynamic data cached for 30 seconds")
+        print("  • Dynamic data cached for 5 seconds")
         return True
     else:
         print("\n❌ Cache TTL configuration needs adjustment")
