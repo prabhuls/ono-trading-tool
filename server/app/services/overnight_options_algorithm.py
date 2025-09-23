@@ -34,11 +34,13 @@ class OvernightOptionsAlgorithm:
     def __init__(self, max_cost_threshold: float = 0.74):
         """
         Initialize the algorithm with configurable parameters
-        
+
         Args:
-            max_cost_threshold: Maximum cost for spreads (default: $0.74)
+            max_cost_threshold: Maximum cost for spreads (default: $0.74 for SPY)
         """
         self.max_cost_threshold = max_cost_threshold
+        self.max_cost_threshold_spy = 0.74
+        self.max_cost_threshold_spx = 3.75
         self.thetradelist_service = get_thetradelist_service()
     
     async def get_current_price(self, ticker: str) -> float:
@@ -251,9 +253,10 @@ class OvernightOptionsAlgorithm:
             return []
     
     def find_qualifying_spreads(
-        self, 
+        self,
         itm_contracts: List[Dict[str, Any]],
-        ticker: str = "SPY"
+        ticker: str = "SPY",
+        current_price: Optional[float] = None
     ) -> List[Dict[str, Any]]:
         """
         Find all spreads that qualify based on cost threshold
@@ -272,8 +275,9 @@ class OvernightOptionsAlgorithm:
         # Sort contracts by strike price for easier pairing
         sorted_contracts = sorted(itm_contracts, key=lambda x: float(x.get("strike", 0)))
         
-        # Determine spread width based on ticker
+        # Determine spread width and max cost based on ticker
         spread_width = 1.0 if ticker == "SPY" else 5.0
+        max_cost = self.max_cost_threshold_spy if ticker == "SPY" else self.max_cost_threshold_spx
         
         # Log detailed contract information
         contract_strikes = [float(c.get("strike", 0)) for c in sorted_contracts]
@@ -283,7 +287,7 @@ class OvernightOptionsAlgorithm:
             spread_width=spread_width,
             total_contracts=len(sorted_contracts),
             available_strikes=contract_strikes[:10] if len(contract_strikes) > 10 else contract_strikes,  # Log first 10 strikes
-            max_cost_threshold=self.max_cost_threshold
+            max_cost_threshold=max_cost
         )
         
         spreads_attempted = 0
@@ -354,7 +358,7 @@ class OvernightOptionsAlgorithm:
                 spread_cost=spread_cost,
                 buy_ask=buy_contract.get("ask", 0),
                 sell_bid=sell_contract.get("bid", 0),
-                max_threshold=self.max_cost_threshold
+                max_threshold=max_cost
             )
             
             # Check if spread qualifies based on max cost threshold
@@ -368,7 +372,7 @@ class OvernightOptionsAlgorithm:
                     spread_cost=spread_cost
                 )
                 continue
-            elif spread_cost > self.max_cost_threshold:
+            elif spread_cost > max_cost:
                 spreads_too_expensive += 1
                 logger.debug(
                     "Spread too expensive",
@@ -376,7 +380,7 @@ class OvernightOptionsAlgorithm:
                     buy_strike=buy_strike,
                     sell_strike=sell_strike,
                     spread_cost=spread_cost,
-                    threshold=self.max_cost_threshold
+                    threshold=max_cost
                 )
                 continue
             else:
@@ -390,6 +394,7 @@ class OvernightOptionsAlgorithm:
                     "buy_contract_ticker": buy_contract.get("contract_ticker"),  # Track specific contract
                     "sell_contract_ticker": sell_contract.get("contract_ticker"),  # Track specific contract
                     "spread_cost": round(spread_cost, 2),
+                    "distance_from_current": abs(sell_strike - current_price) if current_price else 0,
                     **metrics
                 }
                 
@@ -415,7 +420,7 @@ class OvernightOptionsAlgorithm:
             spreads_with_invalid_cost=spreads_with_invalid_cost,
             spreads_too_expensive=spreads_too_expensive,
             qualifying_spreads=len(qualifying_spreads),
-            max_cost_threshold=self.max_cost_threshold
+            max_cost_threshold=max_cost
         )
         
         if qualifying_spreads:
@@ -430,21 +435,26 @@ class OvernightOptionsAlgorithm:
         
         return qualifying_spreads
     
-    def select_optimal_spread(self, qualifying_spreads: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def select_optimal_spread(self, qualifying_spreads: List[Dict[str, Any]], current_price: Optional[float] = None) -> Optional[Dict[str, Any]]:
         """
-        Select the optimal spread (deepest ITM - lowest sell strike)
-        
+        Select the optimal spread (closest to current price for better fill probability)
+
         Args:
             qualifying_spreads: List of qualifying spreads
-            
+            current_price: Current underlying price for proximity calculation
+
         Returns:
             Optimal spread or None if no spreads qualify
         """
         if not qualifying_spreads:
             return None
-        
-        # Sort by sell_strike ascending to get deepest ITM spread
-        optimal_spread = min(qualifying_spreads, key=lambda x: x["sell_strike"])
+
+        # If current price is provided, select spread closest to current price
+        # Otherwise fall back to deepest ITM (lowest sell strike)
+        if current_price:
+            optimal_spread = min(qualifying_spreads, key=lambda x: abs(x["sell_strike"] - current_price))
+        else:
+            optimal_spread = min(qualifying_spreads, key=lambda x: x["sell_strike"])
         
         logger.info(
             "Optimal spread selected",
@@ -536,10 +546,10 @@ class OvernightOptionsAlgorithm:
             itm_contracts = self.filter_itm_strikes(contracts, current_price, ticker)
             
             # Step 4: Find qualifying spreads (width varies by ticker)
-            qualifying_spreads = self.find_qualifying_spreads(itm_contracts, ticker)
-            
-            # Step 5: Select optimal spread (deepest ITM)
-            optimal_spread = self.select_optimal_spread(qualifying_spreads)
+            qualifying_spreads = self.find_qualifying_spreads(itm_contracts, ticker, current_price)
+
+            # Step 5: Select optimal spread (closest to current price)
+            optimal_spread = self.select_optimal_spread(qualifying_spreads, current_price)
             
             # Debug logging when no spreads found
             if not optimal_spread and len(qualifying_spreads) == 0:
@@ -566,7 +576,7 @@ class OvernightOptionsAlgorithm:
                     "current_price": current_price,
                     "total_contracts": len(contracts),
                     "algorithm_applied": True,
-                    "max_cost_threshold": self.max_cost_threshold,
+                    "max_cost_threshold": self.max_cost_threshold_spy if ticker == "SPY" else self.max_cost_threshold_spx,
                     "timestamp": datetime.utcnow().isoformat() + "Z"
                 },
                 "algorithm_result": {
@@ -629,7 +639,7 @@ class OvernightOptionsAlgorithm:
                 "current_price": current_price,
                 "total_contracts": 0,
                 "algorithm_applied": True,
-                "max_cost_threshold": self.max_cost_threshold,
+                "max_cost_threshold": self.max_cost_threshold_spy if ticker == "SPY" else self.max_cost_threshold_spx,
                 "timestamp": datetime.utcnow().isoformat() + "Z"
             },
             "algorithm_result": {
