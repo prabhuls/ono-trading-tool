@@ -99,7 +99,7 @@ export function SpyIntradayChart({
     if (priceData.length === 0) return;
 
     // Chart dimensions
-    const padding = { top: 20, right: 60, bottom: 60, left: 60 };
+    const padding = { top: 20, right: 120, bottom: 60, left: 60 };
     const chartWidth = rect.width - padding.left - padding.right;
     const chartHeight = rect.height - padding.top - padding.bottom;
 
