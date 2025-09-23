@@ -140,9 +140,9 @@ async def get_enhanced_market_status() -> JSONResponse:
         
         # Get enhanced market status service
         market_service = get_market_status_enhanced_service()
-        
+
         # Calculate enhanced session data
-        session_data = market_service.calculate_market_session()
+        session_data = await market_service.calculate_market_session()
         
         logger.info(
             "Enhanced market status calculated successfully",

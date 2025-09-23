@@ -7,6 +7,7 @@ from app.core.logging import get_logger
 from app.core.cache import redis_cache
 from app.services.exceptions import TimeCalculationError, SessionCalculationError
 from app.services.market_status_service import MarketStatusService
+from app.services.external.thetradelist_service import get_thetradelist_service
 
 
 logger = get_logger(__name__)
@@ -59,38 +60,69 @@ class MarketStatusEnhancedService:
         pass
     
     @staticmethod
-    def calculate_market_session(current_utc: Optional[datetime] = None) -> Dict:
+    async def calculate_market_session(current_utc: Optional[datetime] = None) -> Dict:
         """
         Calculate current market session with enhanced information
-        
+
         Args:
             current_utc: Current UTC datetime (defaults to now)
-            
+
         Returns:
             Dictionary containing enhanced market session details
         """
         try:
             if current_utc is None:
                 current_utc = datetime.utcnow()
-            
+
             # Get Eastern Time
             current_et = MarketStatusService.get_eastern_time(current_utc)
             current_date = current_et.date()
             current_time = current_et.time()
-            
+
             # Check if it's a market holiday or weekend
             is_holiday = MarketStatusEnhancedService._is_market_holiday(current_date)
             is_weekend = current_et.weekday() >= 5  # Saturday=5, Sunday=6
-            
+
             # Determine market session
             if is_holiday or is_weekend:
                 market_session = MarketSession.CLOSED
                 is_open = False
             else:
                 market_session, is_open = MarketStatusEnhancedService._get_current_session(current_time)
-            
-            # Calculate next expiration
-            next_expiration = MarketStatusEnhancedService.calculate_next_expiration_date(current_et)
+
+            # Get next expiration from TheTradeList API (use SPY as default)
+            try:
+                # Check cache first
+                cache_key = "market_status:next_expiration"
+                next_expiration = redis_cache.get(cache_key)
+
+                if next_expiration is None:
+                    # Fetch from API
+                    tradelist_service = get_thetradelist_service()
+                    next_expiration = await tradelist_service.get_next_trading_day_expiration("SPY")
+
+                    # Cache for 5 minutes
+                    redis_cache.set(cache_key, next_expiration, ttl=300)
+
+                    logger.info(
+                        "Fetched next expiration from API",
+                        expiration=next_expiration,
+                        source="thetradelist_api"
+                    )
+                else:
+                    logger.debug(
+                        "Using cached next expiration",
+                        expiration=next_expiration,
+                        source="cache"
+                    )
+
+            except Exception as e:
+                # Fallback to static calculation if API fails
+                logger.warning(
+                    "Failed to fetch expiration from API, using static calculation",
+                    error=str(e)
+                )
+                next_expiration = MarketStatusEnhancedService.calculate_next_expiration_date(current_et)
             
             # Get session times in UTC
             session_times = MarketStatusEnhancedService._get_session_times_utc(current_et, current_utc)
@@ -266,10 +298,10 @@ class MarketStatusEnhancedService:
                 return cached_data
             
             logger.info("Fetching fresh sidebar status data")
-            
+
             # Get basic market session info
-            session_data = self.calculate_market_session()
-            
+            session_data = await self.calculate_market_session()
+
             # Prepare response with only basic session data
             response_data = {
                 "isOpen": session_data["isOpen"],
