@@ -73,22 +73,38 @@ async def get_current_user_jwt(
 ) -> Optional[JWTPayload]:
     """
     Get current user from JWT token (no database lookup)
-    
+
     Args:
         token: JWT token from request
-        
+
     Returns:
         JWTPayload if valid, None otherwise
+
+    Raises:
+        HTTPException: If auth is enabled and token is missing/invalid
     """
-    if not token:
-        return None
-    
-    jwt_payload = verify_jwt_token(token)
-    
-    if not jwt_payload:
-        return None
-    
-    return jwt_payload
+    # If auth is enabled, require valid token
+    if settings.enable_auth:
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Missing authentication token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        jwt_payload = verify_jwt_token(token)
+
+        if not jwt_payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        return jwt_payload
+
+    # If auth is disabled, return None (no authentication required)
+    return None
 
 
 async def get_current_user(
