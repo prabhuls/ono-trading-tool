@@ -1,9 +1,11 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from app.core.responses import create_success_response, create_error_response, ErrorCode
 from app.core.logging import get_logger
 from app.core.monitoring import monitor_performance, capture_errors
+from app.core.auth import get_current_active_user
+from app.models.user import User
 from app.schemas.market_status import MarketStatusResponse
 from app.services.market_status_service import MarketStatusService
 
@@ -21,7 +23,9 @@ router = APIRouter()
 )
 @monitor_performance("api.market_status")
 @capture_errors(level="error")
-async def get_market_status() -> JSONResponse:
+async def get_market_status(
+    current_user: User = Depends(get_current_active_user)
+) -> JSONResponse:
     """
     Get current market session status with calculated ET times
     
