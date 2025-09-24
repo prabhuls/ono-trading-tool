@@ -10,7 +10,7 @@ export function OutsideHoursMessage() {
             Scanner Outside Active Hours
           </h2>
           <p className="text-muted-foreground text-lg leading-relaxed">
-            The Overnight Option Scanner is LIVE during the last hour of the market. 
+            The Overnight Option Scanner is LIVE during the last hour of the market from Monday to Thursday. 
             Please check back between <span className="font-semibold text-blue-400">3:00pm and 4:00pm ET</span>
           </p>
           <div className="pt-4">
