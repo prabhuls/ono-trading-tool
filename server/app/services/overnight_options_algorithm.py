@@ -148,6 +148,10 @@ class OvernightOptionsAlgorithm:
 
         profit_target = spread_cost * 1.20  # 20% profit target
 
+        # For SPX, round profit target to nearest 0.05
+        if ticker == "SPX":
+            profit_target = round(profit_target * 20) / 20  # Round to nearest 0.05
+
         return {
             "max_reward": round(max_reward, 2),
             "max_risk": round(max_risk, 2),
