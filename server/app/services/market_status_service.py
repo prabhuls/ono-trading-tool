@@ -99,22 +99,27 @@ class MarketStatusService:
     @staticmethod
     def is_session_active(current_et: datetime) -> bool:
         """
-        Check if current ET time is in the 3:00-4:00 PM window
-        
+        Check if current ET time is in the 3:00-4:00 PM window (Monday-Thursday only)
+
         Args:
             current_et: Current Eastern Time
-            
+
         Returns:
             True if in trading session, False otherwise
         """
+        # Check day of week (0=Monday, 6=Sunday)
+        # Only active Monday (0) through Thursday (3)
+        if current_et.weekday() > 3:  # Friday (4), Saturday (5), Sunday (6)
+            return False
+
         current_hour = current_et.hour
         current_minute = current_et.minute
-        
+
         # Check if in 3:00 PM - 4:00 PM ET window
         start_minutes = MarketStatusService.TRADING_START_HOUR * 60 + MarketStatusService.TRADING_START_MINUTE
         end_minutes = MarketStatusService.TRADING_END_HOUR * 60 + MarketStatusService.TRADING_END_MINUTE
         current_minutes = current_hour * 60 + current_minute
-        
+
         return start_minutes <= current_minutes < end_minutes
     
     @staticmethod
