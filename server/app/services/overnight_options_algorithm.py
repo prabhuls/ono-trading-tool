@@ -96,6 +96,14 @@ class OvernightOptionsAlgorithm:
             # Calculate spread cost as difference between mid prices
             spread_cost = buy_mid - sell_mid
 
+            # Could also check natural vs mid spread
+            natural_cost = float(buy_option.get("ask", 0)) - float(sell_option.get("bid", 0))
+            spread_width = abs(float(sell_option.get("strike", 0)) - float(buy_option.get("strike", 0)))
+
+            # Reject if bid-ask too wide (>10% of spread width)
+            if (natural_cost - spread_cost) > (spread_width * 0.10):
+                return 0.0  # Too wide, reject
+
             # Ensure cost is not negative (which would be invalid for a debit spread)
             return max(0.0, spread_cost)
 
