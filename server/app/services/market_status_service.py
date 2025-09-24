@@ -12,7 +12,7 @@ class MarketStatusService:
     """Service for calculating market status and Eastern Time conversions"""
     
     # Trading window constants (in ET)
-    TRADING_START_HOUR = 15  # 3 PM ET
+    TRADING_START_HOUR = 14  # 3 PM ET
     TRADING_START_MINUTE = 0  # 3:00 PM ET
     TRADING_END_HOUR = 16  # 4 PM ET
     TRADING_END_MINUTE = 0  # 4:00 PM ET
