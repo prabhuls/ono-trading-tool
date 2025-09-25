@@ -516,8 +516,7 @@ async def get_intraday_chart_data(
     interval: str = Query("5m", description="Time interval", regex="^(1m|5m|15m|30m|1h)$"),
     period: str = Query("1d", description="Time period", regex="^(1d|5d|1w)$"),
     buy_strike: Optional[float] = Query(None, description="Buy strike price for benchmark line", ge=0),
-    sell_strike: Optional[float] = Query(None, description="Sell strike price for benchmark line", ge=0),
-    current_user: Optional[JWTPayload] = Depends(conditional_jwt_token)
+    sell_strike: Optional[float] = Query(None, description="Sell strike price for benchmark line", ge=0)
 ) -> JSONResponse:
     """
     Get intraday chart data for SPY panel with real market data
@@ -553,8 +552,7 @@ async def get_intraday_chart_data(
             interval=interval,
             period=period,
             buy_strike=buy_strike,
-            sell_strike=sell_strike,
-            user_id=getattr(current_user, 'id', None) if current_user else None
+            sell_strike=sell_strike
         )
         
         # Get TheTradeList service
