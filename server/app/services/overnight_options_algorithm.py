@@ -15,6 +15,7 @@ Based on the requirements from PROJECT_REQUIREMENTS.md:
 
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
+import math
 from app.core.logging import get_logger
 from app.services.external.thetradelist_service import get_thetradelist_service
 from app.services.external.base import ExternalAPIError
@@ -126,12 +127,18 @@ class OvernightOptionsAlgorithm:
 
         Returns:
             Dictionary with max_reward, max_risk, roi_potential, profit_target
+
+        Raises:
+            ValueError: If spread_cost is not positive
         """
+        if spread_cost <= 0:
+            raise ValueError(f"Invalid spread cost: {spread_cost}. Must be positive.")
+
         # Spread width: SPY uses $1, SPX uses $5
         max_value = 1.00 if ticker == "SPY" else 5.00
         max_reward = max_value - spread_cost
         max_risk = spread_cost
-        roi_potential = (max_reward / spread_cost * 100) if spread_cost > 0 else 0
+        roi_potential = (max_reward / spread_cost * 100)
 
         # Apply ROI sanity check - max 200% (2:1 reward/risk)
         if roi_potential > 200:
@@ -323,10 +330,12 @@ class OvernightOptionsAlgorithm:
             sell_strike = buy_strike + spread_width
             sell_contract = None
 
-            # Collect all candidates with matching strike
+            # Collect all candidates with matching strike (using tolerance for float comparison)
             candidates = []
             for sell_candidate in sorted_contracts[i+1:]:
-                if float(sell_candidate.get("strike", 0)) == sell_strike:
+                candidate_strike = float(sell_candidate.get("strike", 0))
+                # Use tolerance-based comparison for floating point numbers
+                if math.isclose(candidate_strike, sell_strike, abs_tol=0.001):
                     candidates.append(sell_candidate)
 
             # For SPX, prefer contracts from the same series
@@ -396,7 +405,17 @@ class OvernightOptionsAlgorithm:
                 )
                 continue
             else:
-                metrics = self.calculate_spread_metrics(spread_cost, ticker)
+                try:
+                    metrics = self.calculate_spread_metrics(spread_cost, ticker)
+                except ValueError as e:
+                    logger.warning(
+                        "Failed to calculate spread metrics",
+                        ticker=ticker,
+                        buy_strike=buy_strike,
+                        sell_strike=sell_strike,
+                        error=str(e)
+                    )
+                    continue
                 
                 spread_info = {
                     "buy_strike": buy_strike,
@@ -514,20 +533,37 @@ class OvernightOptionsAlgorithm:
         return highlighted_contracts
     
     async def run_algorithm(
-        self, 
+        self,
         ticker: str = "SPY",
         expiration_date: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Run the complete overnight options algorithm
-        
+
         Args:
             ticker: Stock ticker (default: "SPY")
             expiration_date: Option expiration date (default: next trading day)
-            
+
         Returns:
             Complete algorithm results with highlighted option chain and metrics
+
+        Raises:
+            ValueError: If ticker is invalid or date format is incorrect
+            ExternalAPIError: If API calls fail
         """
+        # Validate ticker
+        valid_tickers = {"SPY", "SPX", "XSP"}
+        ticker = ticker.upper()
+        if ticker not in valid_tickers:
+            raise ValueError(f"Invalid ticker: {ticker}. Must be one of {valid_tickers}")
+
+        # Validate date format if provided
+        if expiration_date:
+            try:
+                datetime.strptime(expiration_date, "%Y-%m-%d")
+            except ValueError:
+                raise ValueError(f"Invalid date format: {expiration_date}. Use YYYY-MM-DD")
+
         try:
             logger.info(
                 "Starting overnight options algorithm",
