@@ -488,3 +488,41 @@ async def conditional_jwt_token_vip(
         )
 
     return jwt_payload
+
+
+async def public_jwt_token(
+    token: Optional[str] = Depends(get_current_token)
+) -> Optional[JWTPayload]:
+    """
+    Public JWT token validation - no subscription required
+    Used for auth endpoints that should be accessible to verify token status
+
+    Args:
+        token: JWT token from request
+
+    Returns:
+        JWTPayload if valid token provided, None if no token or auth disabled
+
+    Raises:
+        HTTPException: If token is provided but invalid/expired
+    """
+    # If auth is disabled, return None (no authentication required)
+    if not settings.enable_auth:
+        return None
+
+    # If no token provided, return None (this endpoint allows no token)
+    if not token:
+        return None
+
+    # If token is provided, it must be valid
+    jwt_payload = verify_jwt_token(token)
+
+    if not jwt_payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # No subscription check - return the payload
+    return jwt_payload
