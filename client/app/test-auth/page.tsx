@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAuth } from "@/lib/hooks/useAuth";
+import { useAuthContext } from "@/contexts/AuthContext";
 import { AuthService } from "@/lib/auth";
 
 export default function TestAuthPage() {
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuthContext();
   const [tokenInfo, setTokenInfo] = useState<any>(null);
   const [verifyResult, setVerifyResult] = useState<any>(null);
 

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useAuth } from "@/lib/hooks/useAuth";
+import { useAuthContext } from "@/contexts/AuthContext";
 import { ComprehensiveCreditSpreadDisplay } from './ComprehensiveCreditSpreadDisplay';
 
 interface TodaysMover {
@@ -56,7 +56,7 @@ interface CreditSpreadData {
 }
 
 export function TodaysMoversCards() {
-  const { isAuthenticated, isLoading: authLoading, token: authToken } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuthContext();
   const [randomStocks, setRandomStocks] = useState<TodaysMover[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showChart, setShowChart] = useState(false);
@@ -108,7 +108,7 @@ export function TodaysMoversCards() {
         // Check BOTH storage locations for token
         const localToken = localStorage.getItem('auth_token');
         const sessionToken = sessionStorage.getItem('token');
-        const token = localToken || sessionToken || authToken;
+        const token = localToken || sessionToken;
         
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
         // Include token in both query param and header for compatibility

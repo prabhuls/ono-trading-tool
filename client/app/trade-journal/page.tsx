@@ -20,7 +20,7 @@ import { format } from "date-fns";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { ComprehensiveCreditSpreadDisplay } from "@/components/ComprehensiveCreditSpreadDisplay";
 import { useToast } from "@/lib/hooks/use-toast";
-import { useAuth } from "@/lib/hooks/useAuth";
+import { useAuthContext } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 
 interface SavedCreditSpread {
@@ -57,7 +57,7 @@ export default function TradeJournal() {
   const [refreshTrigger, setRefreshTrigger] = useState(0); // Force refresh trigger
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuthContext();
   const router = useRouter();
 
   // FORCE REFRESH EVERY TIME TRADE JOURNAL IS ACCESSED

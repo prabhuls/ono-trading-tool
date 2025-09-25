@@ -117,13 +117,16 @@ export class AuthService {
 
       console.log("Token verification response:", response);
 
-      // Check if response indicates success and valid token
-      if (response.success && response.valid && response.user) {
-        // Store user data from verified token
-        const user: User = response.user;
-        this.setStoredUser(user);
-        console.log("Token verification successful, user stored");
-        return true;
+      // Check if response indicates success and valid token - ApiClient wraps the response
+      if (response.success && response.data) {
+        const data = response.data as any;
+        if (data.valid && data.user) {
+          // Store user data from verified token
+          const user: User = data.user;
+          this.setStoredUser(user);
+          console.log("Token verification successful, user stored");
+          return true;
+        }
       }
 
       // Token is invalid, clear auth
