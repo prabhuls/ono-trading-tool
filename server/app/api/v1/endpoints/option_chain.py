@@ -13,8 +13,7 @@ from fastapi.responses import JSONResponse
 from app.core.responses import create_success_response, create_error_response, ErrorCode
 from app.core.logging import get_logger
 from app.core.monitoring import monitor_performance, capture_errors
-from app.core.auth import optional_user, get_current_active_user
-from app.models.user import User
+from app.core.auth import optional_user
 from app.core.cache import redis_cache
 from app.schemas.option_chain import (
     OptionChainResponse,
@@ -328,9 +327,7 @@ async def get_raw_option_chain(
     operation_id="get_algorithm_health"
 )
 @monitor_performance("api.option_chain.algorithm_health")
-async def get_algorithm_health(
-    current_user: User = Depends(get_current_active_user)
-) -> JSONResponse:
+async def get_algorithm_health() -> JSONResponse:
     """
     Health check for the overnight options algorithm
     

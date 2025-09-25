@@ -5,8 +5,7 @@ from fastapi.responses import JSONResponse
 from app.core.responses import create_success_response, create_error_response, ErrorCode
 from app.core.logging import get_logger
 from app.core.monitoring import monitor_performance, capture_errors
-from app.core.auth import optional_user, get_current_active_user
-from app.models.user import User
+from app.core.auth import optional_user
 from app.core.cache import redis_cache
 from app.schemas.market_data import (
     MarketSidebarStatusResponse,
@@ -122,9 +121,7 @@ async def get_market_sidebar_status(
 )
 @monitor_performance("api.market_data.enhanced_status")
 @capture_errors(level="error")
-async def get_enhanced_market_status(
-    current_user: User = Depends(get_current_active_user)
-) -> JSONResponse:
+async def get_enhanced_market_status() -> JSONResponse:
     """
     Get enhanced market session status with detailed timing information
     
@@ -180,9 +177,7 @@ async def get_enhanced_market_status(
     operation_id="get_market_health"
 )
 @monitor_performance("api.market_data.health")
-async def get_market_health(
-    current_user: User = Depends(get_current_active_user)
-) -> JSONResponse:
+async def get_market_health() -> JSONResponse:
     """
     Check health status of market data services
     
