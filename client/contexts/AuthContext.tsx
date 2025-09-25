@@ -44,31 +44,52 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Check if token is in URL (from One Click Trading)
         const urlParams = new URLSearchParams(window.location.search);
         const tokenFromUrl = urlParams.get("token");
-        
+
         if (tokenFromUrl) {
-          // Store the token and clean URL
+          console.log("Token found in URL, storing immediately...");
+          // Store the token IMMEDIATELY and update ApiClient
           AuthService.setToken(tokenFromUrl);
+          // Clean URL without reloading
           const newUrl = window.location.pathname;
           window.history.replaceState({}, document.title, newUrl);
+
+          // Set loading state while verifying
+          setAuthState({
+            user: { sub: "verifying" } as User,
+            isAuthenticated: false,
+            isLoading: true,
+            token: tokenFromUrl,
+          });
         }
-        
+
         const token = AuthService.getToken();
         if (token) {
+          console.log("Verifying token with backend...");
           // Verify token with backend
           const isValid = await AuthService.verifyToken();
           if (isValid) {
             // Get stored user from AuthService (set during verification)
             const user = AuthService.getStoredUser();
             if (user) {
+              console.log("Token verified, user authenticated");
               setAuthState({
                 user,
                 isAuthenticated: true,
                 isLoading: false,
                 token,
               });
+            } else {
+              console.log("Token valid but no user data");
+              setAuthState({
+                user: null,
+                isAuthenticated: false,
+                isLoading: false,
+                token: null,
+              });
             }
           } else {
             // Invalid token
+            console.log("Token verification failed");
             AuthService.clearAuth();
             setAuthState({
               user: null,
@@ -79,6 +100,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           }
         } else {
           // No token
+          console.log("No token found");
           setAuthState({
             user: null,
             isAuthenticated: false,
@@ -88,12 +110,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       } catch (error) {
         console.error("Auth initialization error:", error);
-        setAuthState({
-          user: null,
-          isAuthenticated: false,
-          isLoading: false,
-          token: null,
-        });
+        // On error, check if we at least have a token for fallback auth
+        const token = AuthService.getToken();
+        if (token) {
+          console.log("Network error but token exists, keeping authenticated");
+          setAuthState({
+            user: { sub: "cached", user_id: "cached" } as User,
+            isAuthenticated: true,
+            isLoading: false,
+            token,
+          });
+        } else {
+          setAuthState({
+            user: null,
+            isAuthenticated: false,
+            isLoading: false,
+            token: null,
+          });
+        }
       }
     };
 

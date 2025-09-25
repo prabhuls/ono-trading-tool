@@ -430,8 +430,17 @@ async def conditional_jwt_token(
         )
 
     # Check for ONO or ONOV subscription
+    # Handle different subscription structures:
+    # 1. Direct boolean: {"ONO": true, "ONOV": true}
+    # 2. Array within FINMC: {"FINMC": ["ONO", "ONOV", ...]}
     has_ono = jwt_payload.get_subscription("ONO") is True
     has_onov = jwt_payload.get_subscription("ONOV") is True
+
+    # Also check if ONO/ONOV are in FINMC array
+    finmc_subscriptions = jwt_payload.get_subscription("FINMC")
+    if finmc_subscriptions and isinstance(finmc_subscriptions, list):
+        has_ono = has_ono or ("ONO" in finmc_subscriptions)
+        has_onov = has_onov or ("ONOV" in finmc_subscriptions)
 
     if not (has_ono or has_onov):
         raise HTTPException(
@@ -479,7 +488,15 @@ async def conditional_jwt_token_vip(
         )
 
     # Check for ONOV (VIP) subscription only
+    # Handle different subscription structures:
+    # 1. Direct boolean: {"ONOV": true}
+    # 2. Array within FINMC: {"FINMC": ["ONOV", ...]}
     has_onov = jwt_payload.get_subscription("ONOV") is True
+
+    # Also check if ONOV is in FINMC array
+    finmc_subscriptions = jwt_payload.get_subscription("FINMC")
+    if finmc_subscriptions and isinstance(finmc_subscriptions, list):
+        has_onov = has_onov or ("ONOV" in finmc_subscriptions)
 
     if not has_onov:
         raise HTTPException(

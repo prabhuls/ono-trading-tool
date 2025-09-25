@@ -54,7 +54,9 @@ export class AuthService {
   static setToken(token: string): void {
     if (typeof window !== "undefined") {
       localStorage.setItem(AUTH_TOKEN_KEY, token);
+      // Immediately sync with ApiClient for all API calls
       ApiClient.setAuthToken(token);
+      console.log("Token stored and ApiClient synchronized");
     }
   }
 
@@ -105,18 +107,27 @@ export class AuthService {
   static async verifyToken(): Promise<boolean> {
     try {
       const token = this.getToken();
-      if (!token) return false;
-      
+      if (!token) {
+        console.log("No token available for verification");
+        return false;
+      }
+
+      console.log("Verifying token with backend...");
       const response = await ApiClient.get<TokenVerifyResponse>("/api/v1/auth/verify");
-      
-      if (response.success && response.data?.valid && response.data?.user) {
-        // Store user data from OCT token
-        const user: User = response.data.user;
+
+      console.log("Token verification response:", response);
+
+      // Check if response indicates success and valid token
+      if (response.success && response.valid && response.user) {
+        // Store user data from verified token
+        const user: User = response.user;
         this.setStoredUser(user);
+        console.log("Token verification successful, user stored");
         return true;
       }
-      
+
       // Token is invalid, clear auth
+      console.log("Token verification failed, clearing auth");
       this.clearAuth();
       return false;
     } catch (error) {
