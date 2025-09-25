@@ -9,7 +9,8 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 import logging
 
-from app.core.oct_auth import verify_oct_token, OCTTokenPayload
+from app.core.auth import conditional_jwt_token
+from app.core.security import JWTPayload
 from app.core.cache import credit_spread_cache
 from app.services.credit_spread_scanner import CreditSpreadScanner
 from app.services.tradelist.client import TradeListClient
@@ -41,7 +42,7 @@ class CreditSpreadResponse(BaseModel):
 @router.post("/analyze-credit-spread", response_model=CreditSpreadResponse)
 async def analyze_credit_spread(
     request: CreditSpreadRequest,
-    current_user: Optional[OCTTokenPayload] = Depends(verify_oct_token)
+    current_user: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ):
     """
     Analyze credit spreads for a given ticker symbol with trend-based logic
@@ -199,7 +200,7 @@ async def credit_spread_status():
 @router.post("/clear-spread-cache")
 async def clear_spread_cache(
     ticker: Optional[str] = None,
-    current_user: Optional[OCTTokenPayload] = Depends(verify_oct_token)
+    current_user: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ):
     """
     Clear credit spread cache

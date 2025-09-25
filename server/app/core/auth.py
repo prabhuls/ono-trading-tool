@@ -397,21 +397,21 @@ async def conditional_jwt_token(
     token: Optional[str] = Depends(get_current_token)
 ) -> Optional[JWTPayload]:
     """
-    Conditionally require JWT token based on ENABLE_AUTH setting
-    
+    Conditionally require JWT token with ONO or ONOV subscription based on ENABLE_AUTH setting
+
     Args:
         token: JWT token from request
-        
+
     Returns:
         JWTPayload if authenticated or auth disabled, None if auth disabled and no token
-        
+
     Raises:
-        HTTPException: If auth is enabled and token is missing/invalid
+        HTTPException: If auth is enabled and token is missing/invalid/lacks subscription
     """
     # If auth is disabled, return None (no authentication required)
     if not settings.enable_auth:
         return None
-    
+
     # If auth is enabled, require valid token
     if not token:
         raise HTTPException(
@@ -419,14 +419,72 @@ async def conditional_jwt_token(
             detail="Missing authentication token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     jwt_payload = verify_jwt_token(token)
-    
+
     if not jwt_payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
+    # Check for ONO or ONOV subscription
+    has_ono = jwt_payload.get_subscription("ONO") is True
+    has_onov = jwt_payload.get_subscription("ONOV") is True
+
+    if not (has_ono or has_onov):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="ONO or ONOV subscription required"
+        )
+
+    return jwt_payload
+
+
+async def conditional_jwt_token_vip(
+    token: Optional[str] = Depends(get_current_token)
+) -> Optional[JWTPayload]:
+    """
+    Conditionally require JWT token with ONOV (VIP) subscription based on ENABLE_AUTH setting
+
+    Args:
+        token: JWT token from request
+
+    Returns:
+        JWTPayload if authenticated or auth disabled, None if auth disabled and no token
+
+    Raises:
+        HTTPException: If auth is enabled and token is missing/invalid/lacks ONOV subscription
+    """
+    # If auth is disabled, return None (no authentication required)
+    if not settings.enable_auth:
+        return None
+
+    # If auth is enabled, require valid token
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authentication token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    jwt_payload = verify_jwt_token(token)
+
+    if not jwt_payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Check for ONOV (VIP) subscription only
+    has_onov = jwt_payload.get_subscription("ONOV") is True
+
+    if not has_onov:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="ONOV (VIP) subscription required"
+        )
+
     return jwt_payload

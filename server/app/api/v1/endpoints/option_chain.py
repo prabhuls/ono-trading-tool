@@ -13,7 +13,8 @@ from fastapi.responses import JSONResponse
 from app.core.responses import create_success_response, create_error_response, ErrorCode
 from app.core.logging import get_logger
 from app.core.monitoring import monitor_performance, capture_errors
-from app.core.auth import optional_user
+from app.core.auth import conditional_jwt_token
+from app.core.security import JWTPayload
 from app.core.cache import redis_cache
 from app.schemas.option_chain import (
     OptionChainResponse,
@@ -77,7 +78,7 @@ async def get_option_chain(
         ge=0.01,
         le=50.00
     ),
-    current_user = Depends(optional_user)
+    current_user: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ) -> JSONResponse:
     """
     Get option chain with overnight algorithm applied
@@ -207,7 +208,7 @@ async def get_raw_option_chain(
         description="Option expiration date in YYYY-MM-DD format (defaults to next trading day)",
         regex="^\\d{4}-\\d{2}-\\d{2}$"
     ),
-    current_user = Depends(optional_user)
+    current_user: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ) -> JSONResponse:
     """
     Get raw option chain data without algorithm

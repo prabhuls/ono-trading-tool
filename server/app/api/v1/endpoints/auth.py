@@ -104,8 +104,8 @@ async def create_test_token(
     
     if include_subscriptions:
         additional_claims["subscriptions"] = {
-            "FI": True,
-            "DITTY": True
+            "ONO": True,
+            "ONOV": True
         }
     
     token = create_access_token(
