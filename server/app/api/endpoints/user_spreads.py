@@ -13,7 +13,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_async_session
-from app.core.oct_auth import verify_oct_token, OCTTokenPayload
+from app.core.auth import conditional_jwt_token
+from app.core.security import JWTPayload
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ router = APIRouter()
 async def claim_spread(
     spread_data: Dict[str, Any],
     session: AsyncSession = Depends(get_async_session),
-    jwt_payload: Optional[OCTTokenPayload] = Depends(verify_oct_token)
+    jwt_payload: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ):
     """
     Claim a credit spread - stores directly with JWT user ID
@@ -82,7 +83,7 @@ async def claim_spread(
 @router.get("/user-claims")
 async def get_user_claims(
     session: AsyncSession = Depends(get_async_session),
-    jwt_payload: Optional[OCTTokenPayload] = Depends(verify_oct_token)
+    jwt_payload: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ):
     """
     Get all claimed spreads for the authenticated user
@@ -146,7 +147,7 @@ async def get_user_claims(
 async def delete_spread(
     spread_id: int,
     session: AsyncSession = Depends(get_async_session),
-    jwt_payload: Optional[OCTTokenPayload] = Depends(verify_oct_token)
+    jwt_payload: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ):
     """
     Delete a claimed spread (only if owned by user)
@@ -204,7 +205,7 @@ async def update_spread_status(
     spread_id: int,
     status_update: Dict[str, Any],
     session: AsyncSession = Depends(get_async_session),
-    jwt_payload: Optional[OCTTokenPayload] = Depends(verify_oct_token)
+    jwt_payload: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ):
     """
     Update spread status (active, closed, expired)

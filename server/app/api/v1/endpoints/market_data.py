@@ -5,7 +5,8 @@ from fastapi.responses import JSONResponse
 from app.core.responses import create_success_response, create_error_response, ErrorCode
 from app.core.logging import get_logger
 from app.core.monitoring import monitor_performance, capture_errors
-from app.core.auth import optional_user
+from app.core.auth import conditional_jwt_token
+from app.core.security import JWTPayload
 from app.core.cache import redis_cache
 from app.schemas.market_data import (
     MarketSidebarStatusResponse,
@@ -57,7 +58,7 @@ async def get_cached_or_fetch(cache_key: str, fetch_func, ttl: int = 30):
 @monitor_performance("api.market_data.sidebar_status")
 @capture_errors(level="error")
 async def get_market_sidebar_status(
-    current_user = Depends(optional_user)
+    current_user: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ) -> JSONResponse:
     """
     Get market status data optimized for the sidebar component
@@ -235,7 +236,7 @@ async def get_market_health() -> JSONResponse:
 @capture_errors(level="error")
 async def get_current_price(
     ticker: str = Path(..., description="Stock ticker symbol (SPY, XSP, SPX)", regex="^(SPY|XSP|SPX)$"),
-    current_user = Depends(optional_user)
+    current_user: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ) -> JSONResponse:
     """
     Get current price for a single stock ticker
@@ -328,7 +329,7 @@ async def get_current_price(
 @capture_errors(level="error")
 async def get_current_prices(
     tickers: List[str] = Query(..., description="Comma-separated list of stock ticker symbols", example=["SPY", "XSP", "SPX"]),
-    current_user = Depends(optional_user)
+    current_user: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ) -> JSONResponse:
     """
     Get current prices for multiple stock tickers
@@ -430,7 +431,7 @@ async def get_current_prices(
 @monitor_performance("api.market_data.spy_price")
 @capture_errors(level="error")
 async def get_spy_price(
-    current_user = Depends(optional_user)
+    current_user: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ) -> JSONResponse:
     """
     Get current SPY price (dedicated endpoint for the trading algorithm)
@@ -516,7 +517,7 @@ async def get_intraday_chart_data(
     period: str = Query("1d", description="Time period", regex="^(1d|5d|1w)$"),
     buy_strike: Optional[float] = Query(None, description="Buy strike price for benchmark line", ge=0),
     sell_strike: Optional[float] = Query(None, description="Sell strike price for benchmark line", ge=0),
-    current_user = Depends(optional_user)
+    current_user: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ) -> JSONResponse:
     """
     Get intraday chart data for SPY panel with real market data

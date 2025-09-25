@@ -9,7 +9,8 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 import logging
 
-from app.core.oct_auth import verify_oct_token, OCTTokenPayload
+from app.core.auth import conditional_jwt_token
+from app.core.security import JWTPayload
 from app.services.tradelist.client import TradeListClient
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ router = APIRouter()
 @router.get("/chart-data/{symbol}")
 async def get_chart_data(
     symbol: str,
-    current_user: Optional[OCTTokenPayload] = Depends(verify_oct_token)
+    current_user: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ):
     """
     Get historical price data for charting
@@ -194,7 +195,7 @@ async def get_chart_data(
 @router.get("/stocks/{symbol}")
 async def get_stock_chart_data(
     symbol: str,
-    current_user: Optional[OCTTokenPayload] = Depends(verify_oct_token)
+    current_user: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ):
     """
     Alternative endpoint path to match frontend expectations

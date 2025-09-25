@@ -11,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.movers import TodaysMover
 from app.core.database import get_async_session
-from app.core.oct_auth import verify_oct_token, OCTTokenPayload
+from app.core.auth import conditional_jwt_token
+from app.core.security import JWTPayload
 
 import logging
 
@@ -24,7 +25,7 @@ router = APIRouter()
 async def get_todays_movers(
     limit: int = 5,
     session: AsyncSession = Depends(get_async_session),
-    current_user: Optional[OCTTokenPayload] = Depends(verify_oct_token)
+    current_user: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ):
     """
     Get today's market movers with verified credit spreads
@@ -88,7 +89,7 @@ async def get_todays_movers(
 async def get_stock_data(
     symbol: str,
     session: AsyncSession = Depends(get_async_session),
-    current_user: Optional[OCTTokenPayload] = Depends(verify_oct_token)
+    current_user: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ):
     """
     Get detailed stock data for a specific symbol
