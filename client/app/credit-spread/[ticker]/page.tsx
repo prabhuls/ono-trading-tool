@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ComprehensiveCreditSpreadDisplay } from '@/components/ComprehensiveCreditSpreadDisplay';
-import { useAuth } from '@/lib/hooks/useAuth';
+import { useAuthContext } from '@/contexts/AuthContext';
+import { AuthService } from '@/lib/auth';
 
 export default function CreditSpreadAnalysisPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuthContext();
   const [spreadData, setSpreadData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,19 +29,13 @@ export default function CreditSpreadAnalysisPage() {
     setError(null);
     
     try {
-      // Check BOTH storage locations for token
-      const localToken = localStorage.getItem('auth_token');
-      const sessionToken = sessionStorage.getItem('token');
-      const token = localToken || sessionToken;
-      
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      // Include token in query param as well for backend compatibility
-      const url = token ? `${backendUrl}/api/v1/credit-spread/analyze-credit-spread?token=${token}` : `${backendUrl}/api/v1/credit-spread/analyze-credit-spread`;
-      const response = await fetch(url, {
+      const response = await fetch(`${backendUrl}/api/v1/credit-spread/analyze-credit-spread`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          // Let the ApiClient handle auth token automatically
+          ...(AuthService.getToken() ? { 'Authorization': `Bearer ${AuthService.getToken()}` } : {}),
         },
         body: JSON.stringify({
           ticker: tickerSymbol.toUpperCase(),
