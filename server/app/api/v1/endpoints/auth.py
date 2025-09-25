@@ -32,19 +32,20 @@ async def verify_token(
     
     # Return user object in the format the frontend expects
     # OCT tokens only have sub and subscriptions, no email/username
-    return {
-        "success": True,
-        "user": {
-            "sub": jwt_payload.user_id,
-            "user_id": jwt_payload.user_id,
-            "subscriptions": jwt_payload.subscriptions,
-            "exp": jwt_payload.exp,
-            "iat": jwt_payload.iat,
-            "is_active": jwt_payload.is_active
+    return create_success_response(
+        data={
+            "user": {
+                "sub": jwt_payload.user_id,
+                "user_id": jwt_payload.user_id,
+                "subscriptions": jwt_payload.subscriptions,
+                "exp": jwt_payload.exp,
+                "iat": jwt_payload.iat,
+                "is_active": jwt_payload.is_active
+            },
+            "valid": True
         },
-        "valid": True,
-        "message": "Token is valid"
-    }
+        message="Token is valid"
+    )
 
 
 @router.get("/check-subscription/{subscription_name}")
