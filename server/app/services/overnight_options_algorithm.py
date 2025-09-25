@@ -27,11 +27,15 @@ logger = get_logger(__name__)
 class OvernightOptionsAlgorithm:
     """
     Overnight Options Algorithm implementation
-    
+
     This service implements the overnight options trading algorithm that identifies
     optimal call debit spreads for SPY ($1-wide) and SPX ($5-wide) options.
     """
-    
+
+    # Class-level constants for configuration
+    SPX_DEEP_ITM_GAP_PERCENTAGE = 20  # Consider deep ITM when gap > 20% of current price
+    SPX_DEEP_ITM_STRIKE_SELECTION = 0.25  # Use top 25% of available strikes in deep ITM
+
     def __init__(self, max_cost_threshold: float = 0.74):
         """
         Initialize the algorithm with configurable parameters
@@ -218,23 +222,37 @@ class OvernightOptionsAlgorithm:
             
             # For SPX: Handle deep ITM scenarios
             else:  # SPX
-                # Check if we're in deep ITM scenario (highest strike > 1000 points below current)
-                if (current_price - max_available_strike) > 1000:
+                # Calculate gap as percentage of current price
+                gap_percentage = ((current_price - max_available_strike) / current_price * 100) if current_price > 0 else 0
+
+                # Check if we're in deep ITM scenario (highest strike > threshold % below current)
+                if gap_percentage > self.SPX_DEEP_ITM_GAP_PERCENTAGE:
                     logger.info(
                         "SPX deep ITM scenario - using strikes closest to current price",
                         ticker=ticker,
                         current_price=current_price,
                         max_available_strike=max_available_strike,
-                        gap=current_price - max_available_strike
+                        gap_points=current_price - max_available_strike,
+                        gap_percentage=round(gap_percentage, 2)
                     )
-                    
+
                     # Use the upper portion of available strikes (closest to current price)
-                    # Take strikes that are within reasonable range of the highest available
-                    threshold = max_available_strike - 500  # Use strikes within 500 points of the highest
-                    
+                    # Take the top percentage of available strikes based on configuration
+                    strike_range = max_available_strike - min_available_strike
+                    threshold = max_available_strike - (strike_range * self.SPX_DEEP_ITM_STRIKE_SELECTION)
+
+                    logger.info(
+                        "SPX deep ITM selection criteria",
+                        ticker=ticker,
+                        strike_range=strike_range,
+                        threshold=threshold,
+                        selection_percentage=self.SPX_DEEP_ITM_STRIKE_SELECTION * 100,
+                        selection_strategy=f"top_{int(self.SPX_DEEP_ITM_STRIKE_SELECTION * 100)}_percent"
+                    )
+
                     for contract in contracts:
                         strike = float(contract.get("strike", 0))
-                        if strike >= threshold:  # Use strikes close to the highest available
+                        if strike >= threshold:  # Use strikes in top 25% range
                             itm_contracts.append(contract)
                 
                 else:
@@ -245,13 +263,14 @@ class OvernightOptionsAlgorithm:
                             itm_contracts.append(contract)
             
             # Log final results
+            gap_percentage = ((current_price - max_available_strike) / current_price * 100) if (ticker == "SPX" and current_price > 0) else 0
             logger.info(
                 "ITM contracts filtered",
                 ticker=ticker,
                 total_contracts=len(contracts),
                 itm_contracts=len(itm_contracts),
                 current_price=current_price,
-                filtering_strategy="deep_itm" if (ticker == "SPX" and (current_price - max_available_strike) > 1000) else "standard_itm"
+                filtering_strategy="deep_itm" if (ticker == "SPX" and gap_percentage > self.SPX_DEEP_ITM_GAP_PERCENTAGE) else "standard_itm"
             )
             
             # Additional debug logging for strikes included
