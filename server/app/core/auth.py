@@ -79,32 +79,16 @@ async def get_current_user_jwt(
 
     Returns:
         JWTPayload if valid, None otherwise
-
-    Raises:
-        HTTPException: If auth is enabled and token is missing/invalid
     """
-    # If auth is enabled, require valid token
-    if settings.enable_auth:
-        if not token:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Missing authentication token",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+    if not token:
+        return None
 
-        jwt_payload = verify_jwt_token(token)
+    jwt_payload = verify_jwt_token(token)
 
-        if not jwt_payload:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+    if not jwt_payload:
+        return None
 
-        return jwt_payload
-
-    # If auth is disabled, return None (no authentication required)
-    return None
+    return jwt_payload
 
 
 async def get_current_user(
