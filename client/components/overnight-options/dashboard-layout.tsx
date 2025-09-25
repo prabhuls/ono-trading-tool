@@ -314,6 +314,7 @@ export function DashboardLayout({ initialTicker }: DashboardLayoutProps = {}) {
               maxCost={maxCost}
               onMaxCostChange={handleMaxCostChange}
               onTickerChange={handleTickerChange}
+              currentPrice={currentSpyPrice}
             />
             <MarketStatus />
           </div>

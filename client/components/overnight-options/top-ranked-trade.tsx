@@ -18,6 +18,7 @@ interface TopRankedTradeProps {
   maxCost: number;
   onMaxCostChange: (newMaxCost: number) => void;
   onTickerChange?: (ticker: string) => void;
+  currentPrice?: number | null; // Price from algorithm calculation
 }
 
 export function TopRankedTrade({
@@ -29,7 +30,8 @@ export function TopRankedTrade({
   onScanForNewSpreads,
   maxCost,
   onMaxCostChange,
-  onTickerChange 
+  onTickerChange,
+  currentPrice
 }: TopRankedTradeProps) {
   const [isMaxCostDialogOpen, setIsMaxCostDialogOpen] = useState(false);
   const tickers: SupportedTicker[] = ['SPY', 'SPX'];
@@ -46,11 +48,12 @@ export function TopRankedTrade({
   const handleMaxCostSave = (newMaxCost: number) => {
     onMaxCostChange(newMaxCost);
   };
-  
-  // Use only real API price data, no hardcoded fallback
-  const displayPrice = priceData?.price;
-  const priceChange = priceData?.change;
-  const priceChangePercent = priceData?.change_percent;
+
+  // Use algorithm price when available, otherwise use independently fetched price
+  const displayPrice = currentPrice ?? priceData?.price;
+  // Price change data only available from independent fetch (not from algorithm)
+  const priceChange = currentPrice ? undefined : priceData?.change;
+  const priceChangePercent = currentPrice ? undefined : priceData?.change_percent;
   const isPositive = (priceChange ?? 0) >= 0;
   return (
     <div className="space-y-4">
@@ -70,14 +73,15 @@ export function TopRankedTrade({
               formatCurrency(displayPrice)
             )}
           </div>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={refreshPrice}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onScanForNewSpreads}
             className="ml-2 text-muted-foreground"
-            disabled={priceLoading || priceRefreshing}
+            disabled={algorithmLoading}
+            title="Refresh price and scan for new spreads"
           >
-            <RefreshCw className={`h-4 w-4 ${(priceLoading || priceRefreshing) ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${algorithmLoading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
         
@@ -249,13 +253,13 @@ export function TopRankedTrade({
 
       {/* Action Buttons */}
       <div className="space-y-2">
-        <Button 
+        <Button
           className="w-full bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-600 disabled:cursor-not-allowed"
           onClick={onScanForNewSpreads}
           disabled={algorithmLoading}
         >
-          {algorithmLoading ? 
-            (activeTicker === 'SPX' ? 'Scanning SPX... (10-15s)' : 'Scanning...') : 
+          {algorithmLoading ?
+            (activeTicker === 'SPX' ? 'Scanning SPX... (10-15s)' : 'Scanning...') :
             'Scan for New Spreads'
           }
         </Button>
