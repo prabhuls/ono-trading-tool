@@ -9,13 +9,15 @@ import { SpyIntradayChart } from './spy-intraday-chart';
 import { OptionChainOptimizer } from './option-chain-optimizer';
 import { StatusBars } from './status-bars';
 import { OutsideHoursMessage } from './outside-hours-message';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle } from 'lucide-react';
 // Removed mock data import - using real API data only
 import { api } from '@/lib/api';
-import type { 
-  ApiMarketStatusResponse, 
-  OptionChainWithAlgorithm, 
+import type {
+  ApiMarketStatusResponse,
+  OptionChainWithAlgorithm,
   OptionChainData,
-  AlgorithmResult 
+  AlgorithmResult
 } from '@/types/overnight-options';
 
 // Helper function to get default max cost based on ticker
@@ -299,6 +301,17 @@ export function DashboardLayout({ initialTicker }: DashboardLayoutProps = {}) {
           onRefresh={handleRefresh}
           marketStatusError={marketStatusError}
         />
+
+        {/* Spread Pricing Warning */}
+        <Alert className="mb-6 border-yellow-600/50 bg-yellow-950/20">
+          <AlertCircle className="h-4 w-4 text-yellow-600" />
+          <AlertTitle className="text-yellow-600">Important Note on Spread Pricing</AlertTitle>
+          <AlertDescription className="text-yellow-100/90">
+            Spread prices on these assets can move rapidly. Always confirm current pricing directly with your broker
+            and be sure to place orders using limit orders (not market orders). If the spread cost shown in the scanner
+            appears off or not tradeable, refresh the scanner to update the pricing.
+          </AlertDescription>
+        </Alert>
 
         {/* Main Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
