@@ -23,7 +23,7 @@ export interface MultipleStockPricesResponse {
 }
 
 // Supported tickers
-export type SupportedTicker = 'SPY' | 'XSP' | 'SPX';
+export type SupportedTicker = 'SPY' | 'XSP' | 'SPX' | 'QQQ' | 'IWM' | 'GLD';
 
 // UI-specific types
 export interface StockPriceDisplayData extends StockPriceData {

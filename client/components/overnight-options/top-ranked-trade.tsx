@@ -4,9 +4,10 @@ import { Button } from '@/components/ui/button';
 import { AlgorithmResult } from '@/types/overnight-options';
 import { formatCurrency, formatROI } from '@/lib/utils/formatters';
 import { useStockPrice } from '@/lib/hooks/useStockPrice';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Crown } from 'lucide-react';
 import type { SupportedTicker } from '@/types/stock-price';
 import { MaxCostDialog } from './max-cost-dialog';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 interface TopRankedTradeProps {
   algorithmResult: AlgorithmResult | null;
@@ -34,15 +35,19 @@ export function TopRankedTrade({
   currentPrice
 }: TopRankedTradeProps) {
   const [isMaxCostDialogOpen, setIsMaxCostDialogOpen] = useState(false);
-  const tickers: SupportedTicker[] = ['SPY', 'SPX'];
-  
+  const { isVipUser } = useAuthContext();
+  const tickers: SupportedTicker[] = ['SPY', 'SPX', 'QQQ', 'IWM', 'GLD'];
+
+  // VIP-only tickers
+  const VIP_TICKERS = ['QQQ', 'IWM', 'GLD'];
+
   // Use real price data from our API
-  const { 
-    priceData, 
-    loading: priceLoading, 
+  const {
+    priceData,
+    loading: priceLoading,
     refreshing: priceRefreshing,
     error: priceError,
-    refresh: refreshPrice 
+    refresh: refreshPrice
   } = useStockPrice(activeTicker as SupportedTicker);
   
   const handleMaxCostSave = (newMaxCost: number) => {
@@ -108,23 +113,61 @@ export function TopRankedTrade({
       {/* Ticker Switcher */}
       <div className="flex justify-center">
         <div className="flex gap-1 bg-gray-800 rounded-lg p-1 w-fit" role="tablist">
-          {tickers.map((ticker) => (
-            <button
-              key={ticker}
-              onClick={() => onTickerChange?.(ticker)}
-              className={`px-3 py-2 rounded-md text-sm font-medium transition-all ${
-                activeTicker === ticker
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-300 hover:text-white hover:bg-gray-700'
-              }`}
-              role="tab"
-              aria-label={`Select ${ticker} ticker`}
-              aria-pressed={activeTicker === ticker}
-              aria-selected={activeTicker === ticker}
-            >
-              {ticker}
-            </button>
-          ))}
+          {tickers.map((ticker) => {
+            // Check if ticker requires VIP subscription
+            const requiresVip = VIP_TICKERS.includes(ticker);
+            const hasVipAccess = isVipUser();
+            const isVipLocked = requiresVip && !hasVipAccess;
+
+            // Check if GLD should be disabled (not Tuesday or Thursday in ET)
+            const etTime = new Date(new Date().toLocaleString("en-US", {timeZone: "America/New_York"}));
+            const currentDayET = etTime.getDay();
+            const isGLDDisabled = ticker === 'GLD' && currentDayET !== 2 && currentDayET !== 4;
+            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+            // Combined disabled state
+            const isDisabled = isGLDDisabled || isVipLocked;
+
+            // Tooltip text
+            let tooltipText = `Select ${ticker}`;
+            if (isVipLocked) {
+              tooltipText = `${ticker} requires VIP (ONO1) subscription`;
+            } else if (isGLDDisabled) {
+              tooltipText = `GLD only available on Tue/Thu ET (Today: ${dayNames[currentDayET]} ET)`;
+            }
+
+            return (
+              <button
+                key={ticker}
+                onClick={() => !isDisabled && onTickerChange?.(ticker)}
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-all relative ${
+                  activeTicker === ticker
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : isDisabled
+                    ? 'text-gray-500 cursor-not-allowed opacity-50'
+                    : 'text-gray-300 hover:text-white hover:bg-gray-700'
+                }`}
+                role="tab"
+                aria-label={`Select ${ticker} ticker`}
+                aria-pressed={activeTicker === ticker}
+                aria-selected={activeTicker === ticker}
+                aria-disabled={isDisabled}
+                title={tooltipText}
+              >
+                <div className="flex items-center gap-1">
+                  {ticker}
+                  {requiresVip && (
+                    <Crown className={`h-3 w-3 ${isVipLocked ? 'text-gray-500' : 'text-yellow-400'}`} />
+                  )}
+                  {ticker === 'GLD' && !isVipLocked && (
+                    <span className="text-xs ml-1 opacity-70">
+                      (T/Th)
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 

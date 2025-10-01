@@ -146,6 +146,9 @@ export function useMultipleStockPrices(tickers: SupportedTicker[]) {
     SPY: null,
     XSP: null,
     SPX: null,
+    QQQ: null,
+    IWM: null,
+    GLD: null,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

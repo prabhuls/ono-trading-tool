@@ -11,6 +11,7 @@ interface AuthContextType {
   subscriptions: Record<string, boolean | unknown>;
   setToken: (token: string) => void;
   checkSubscription: (subscriptionName: string) => boolean;
+  isVipUser: () => boolean;
   refreshAuth: () => Promise<void>;
 }
 
@@ -160,6 +161,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return subscriptions[subscriptionName] === true;
   }, [authState.user]);
 
+  const isVipUser = useCallback((): boolean => {
+    if (!authState.user) return false;
+    const subscriptions = authState.user.subscriptions || {};
+
+    // Check for ONO1 subscription (VIP access)
+    // Handle two subscription formats:
+    // 1. Direct boolean: {ONO1: true}
+    if (subscriptions['ONO1'] === true) return true;
+
+    // 2. FINMC array: {FINMC: ["ONO1", ...]}
+    const finmc = subscriptions['FINMC'];
+    if (Array.isArray(finmc) && finmc.includes('ONO1')) return true;
+
+    return false;
+  }, [authState.user]);
+
   const refreshAuth = useCallback(async () => {
     const token = AuthService.getToken();
     if (!token) {
@@ -212,6 +229,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     subscriptions: authState.user?.subscriptions || {},
     setToken,
     checkSubscription,
+    isVipUser,
     refreshAuth,
   };
 

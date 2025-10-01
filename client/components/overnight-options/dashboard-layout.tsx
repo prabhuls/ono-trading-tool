@@ -9,8 +9,10 @@ import { SpyIntradayChart } from './spy-intraday-chart';
 import { OptionChainOptimizer } from './option-chain-optimizer';
 import { StatusBars } from './status-bars';
 import { OutsideHoursMessage } from './outside-hours-message';
+import { VipSubscriptionModal } from './vip-subscription-modal';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
+import { useAuthContext } from '@/contexts/AuthContext';
 // Removed mock data import - using real API data only
 import { api } from '@/lib/api';
 import type {
@@ -27,6 +29,12 @@ const getDefaultMaxCost = (ticker: string): number => {
       return 0.74; // Default for SPY ($1-wide spreads)
     case 'SPX':
       return 3.75; // Default for SPX ($5-wide spreads, scaled proportionally)
+    case 'QQQ':
+      return 0.74; // Default for QQQ ($1-wide spreads)
+    case 'IWM':
+      return 0.74; // Default for IWM ($1-wide spreads)
+    case 'GLD':
+      return 0.74; // Default for GLD ($1-wide spreads)
     default:
       return 0.74;
   }
@@ -46,6 +54,8 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ initialTicker }: DashboardLayoutProps = {}) {
   const router = useRouter();
   const pathname = usePathname();
+  const { isVipUser } = useAuthContext();
+
   // Initialize with empty states instead of mock data
   const [dashboardData, setDashboardData] = useState({
     currentSpyPrice: null as number | null,
@@ -75,7 +85,7 @@ export function DashboardLayout({ initialTicker }: DashboardLayoutProps = {}) {
     activeTimeRange: null as string | null,
   });
   // Initialize ticker from prop or default to SPY
-  const validTickers = ['SPY', 'SPX'];
+  const validTickers = ['SPY', 'SPX', 'QQQ', 'IWM', 'GLD'];
   const defaultTicker = initialTicker && validTickers.includes(initialTicker) ? initialTicker : 'SPY';
   const [activeTicker, setActiveTicker] = useState(defaultTicker);
   const [isLoading, setIsLoading] = useState(true); // Start with loading state
@@ -92,12 +102,40 @@ export function DashboardLayout({ initialTicker }: DashboardLayoutProps = {}) {
   
   // Active hours state
   const [isActiveHours, setIsActiveHours] = useState<boolean | null>(null); // null = loading
-  
+
+  // VIP subscription modal state
+  const [showVipModal, setShowVipModal] = useState(false);
+  const [blockedTicker, setBlockedTicker] = useState<string | null>(null);
+
   // Status bars state
   const [statusBarsData, setStatusBarsData] = useState({
     scannerActive: null as string | null
   });
   const showScansOutsideHours = process.env.NEXT_PUBLIC_SHOW_SCANS_OUTSIDE_ACTIVE_HOURS === 'true';
+
+  // Helper function to detect VIP subscription errors
+  const isVipSubscriptionError = (error: any): boolean => {
+    // Log error structure for debugging
+    console.log('Checking VIP error:', {
+      error,
+      standardizedError: error?.standardizedError,
+      response: error?.response,
+      message: error?.message
+    });
+
+    const statusCode = error?.standardizedError?.statusCode || error?.response?.status;
+    const message = error?.standardizedError?.message ||
+                   error?.response?.data?.message ||
+                   error?.response?.data?.detail ||
+                   error?.message || '';
+
+    const isVipError = statusCode === 403 &&
+           (message.includes('ONO1') || message.includes('VIP') || message.includes('subscription'));
+
+    console.log('VIP error check result:', { statusCode, message, isVipError });
+
+    return isVipError;
+  };
 
   // Fetch market status from API
   const fetchMarketStatus = async (): Promise<void> => {
@@ -127,8 +165,17 @@ export function DashboardLayout({ initialTicker }: DashboardLayoutProps = {}) {
       }
     } catch (error) {
       console.error('Failed to fetch market status:', error);
-      setMarketStatusError('Unable to fetch real-time market status');
-      
+
+      // Check for VIP subscription error
+      if (isVipSubscriptionError(error)) {
+        setBlockedTicker(activeTicker);
+        setShowVipModal(true);
+        setMarketStatusError(null); // Clear generic error
+      } else {
+        // Generic error for other cases
+        setMarketStatusError('Unable to fetch real-time market status');
+      }
+
       // Set fallback status bar message when API fails
       setStatusBarsData({
         scannerActive: 'Scanner status unavailable - please check connection and try refreshing.'
@@ -179,7 +226,16 @@ export function DashboardLayout({ initialTicker }: DashboardLayoutProps = {}) {
       }
     } catch (error) {
       console.error('Failed to fetch option chain data:', error);
-      setOptionChainError('Unable to fetch option chain data');
+
+      // Check for VIP subscription error
+      if (isVipSubscriptionError(error)) {
+        setBlockedTicker(activeTicker);
+        setShowVipModal(true);
+        setOptionChainError(null); // Clear generic error
+      } else {
+        // Generic error for other cases
+        setOptionChainError('Unable to fetch option chain data');
+      }
     } finally {
       setOptionChainLoading(false);
     }
@@ -190,7 +246,17 @@ export function DashboardLayout({ initialTicker }: DashboardLayoutProps = {}) {
       try {
         // Start loading
         setIsLoading(true);
-        
+
+        // Check if accessing VIP ticker without VIP access on initial load
+        const VIP_TICKERS = ['QQQ', 'IWM', 'GLD'];
+        if (VIP_TICKERS.includes(activeTicker) && !isVipUser()) {
+          console.log('Detected VIP ticker access without VIP subscription on initial load');
+          setBlockedTicker(activeTicker);
+          setShowVipModal(true);
+          setIsLoading(false);
+          return;
+        }
+
         // Fetch data in parallel
         await Promise.all([
           fetchMarketStatus(),
@@ -204,7 +270,7 @@ export function DashboardLayout({ initialTicker }: DashboardLayoutProps = {}) {
         setIsLoading(false);
       }
     };
-    
+
     loadData();
 
     // Set up periodic polling for market status during potential active hours
@@ -261,6 +327,30 @@ export function DashboardLayout({ initialTicker }: DashboardLayoutProps = {}) {
 
   const handleTickerChange = (ticker: string): void => {
     try {
+      // Check VIP subscription for QQQ, IWM, GLD
+      const VIP_TICKERS = ['QQQ', 'IWM', 'GLD'];
+      if (VIP_TICKERS.includes(ticker) && !isVipUser()) {
+        setError(`${ticker} requires VIP (ONO1) subscription. Please upgrade to access this symbol.`);
+        return;
+      }
+
+      // Check GLD day restriction (based on ET timezone)
+      if (ticker === 'GLD') {
+        // Get current ET time
+        const etTime = new Date(new Date().toLocaleString("en-US", {timeZone: "America/New_York"}));
+        const currentDayET = etTime.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+
+        if (currentDayET !== 2 && currentDayET !== 4) { // Tuesday=2, Thursday=4
+          const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+          setError(`GLD options are only available on Tuesdays and Thursdays (ET). Today is ${dayNames[currentDayET]} in ET.`);
+          // Don't change the ticker if GLD is not available today
+          return;
+        }
+      }
+
+      // Clear any previous errors
+      setError(null);
+
       // Update the active ticker
       setActiveTicker(ticker);
 
@@ -358,6 +448,22 @@ export function DashboardLayout({ initialTicker }: DashboardLayoutProps = {}) {
         {/* Bottom Status Bars */}
         <StatusBars statusBars={statusBarsData} />
       </div>
+
+      {/* VIP Subscription Modal */}
+      <VipSubscriptionModal
+        isOpen={showVipModal}
+        ticker={blockedTicker || 'VIP Symbol'}
+        onClose={() => {
+          setShowVipModal(false);
+          setBlockedTicker(null);
+        }}
+        onSwitchToDefault={() => {
+          setShowVipModal(false);
+          setBlockedTicker(null);
+          setActiveTicker('SPY');
+          router.push('/SPY');
+        }}
+      />
     </div>
   );
 }

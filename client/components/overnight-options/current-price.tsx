@@ -20,6 +20,9 @@ const TICKER_INFO: Record<SupportedTicker, { name: string; description: string }
   SPY: { name: 'SPDR S&P 500 ETF', description: 'S&P 500 Index Fund' },
   XSP: { name: 'SPDR S&P 500 Mini-SPX', description: 'Mini S&P 500 Options' },
   SPX: { name: 'S&P 500 Index', description: 'Cash-settled Index Options' },
+  QQQ: { name: 'Invesco QQQ Trust', description: 'Nasdaq-100 Index Fund' },
+  IWM: { name: 'iShares Russell 2000 ETF', description: 'Small-cap Index Fund' },
+  GLD: { name: 'SPDR Gold Shares', description: 'Gold Trust ETF' },
 };
 
 export function CurrentPrice({
