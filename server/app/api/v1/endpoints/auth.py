@@ -82,13 +82,30 @@ async def check_subscription(
 
 @router.get("/dev/create-test-token")
 async def create_test_token(
-    user_id: str = Query("test-user-123"),
-    email: str = Query("test@example.com"),
-    include_subscriptions: bool = Query(True)
+    user_id: str = Query("test-user-123", description="User ID for the test token"),
+    email: str = Query("test@example.com", description="Email for the test token"),
+    include_subscriptions: bool = Query(True, description="Include subscriptions (deprecated, use subscription_type)"),
+    subscription_type: str = Query("both", regex="^(none|ono|onov|both)$", description="Subscription type: none, ono (standard), onov (VIP), or both")
 ):
     """
-    Create a test JWT token for development
-    
+    Create a test JWT token for development with flexible subscription options
+
+    Args:
+        user_id: User identifier
+        email: User email
+        include_subscriptions: (Deprecated) If False, no subscriptions are added
+        subscription_type: Type of subscription to include
+            - "none": No subscriptions
+            - "ono": Only ONO (standard subscription)
+            - "onov": ONO1 (VIP subscription, includes ONO access)
+            - "both": Both ONO and ONO1 (default)
+
+    Examples:
+        - Standard user (ONO only): ?subscription_type=ono
+        - VIP user (ONO1): ?subscription_type=onov
+        - No subscription: ?subscription_type=none or ?include_subscriptions=false
+        - Both (default): ?subscription_type=both or just omit parameters
+
     WARNING: This endpoint should be disabled in production!
     """
     if settings.environment == "production":
@@ -96,7 +113,7 @@ async def create_test_token(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Test token generation is disabled in production"
         )
-    
+
     # Create test token with optional subscriptions
     additional_claims = {
         "email": email,
@@ -104,23 +121,41 @@ async def create_test_token(
         "full_name": "Test User",
         "is_active": True
     }
-    
-    if include_subscriptions:
-        additional_claims["subscriptions"] = {
-            "ONO": True,
-            "ONOV": True
-        }
-    
+
+    # Determine subscriptions based on parameters
+    # include_subscriptions=false takes precedence for backward compatibility
+    if not include_subscriptions:
+        additional_claims["subscriptions"] = {}
+        subscription_message = "no subscriptions"
+    else:
+        # Use subscription_type to determine which subscriptions to include
+        if subscription_type == "none":
+            additional_claims["subscriptions"] = {}
+            subscription_message = "no subscriptions"
+        elif subscription_type == "ono":
+            additional_claims["subscriptions"] = {"ONO": True}
+            subscription_message = "ONO (standard) subscription"
+        elif subscription_type == "onov":
+            # ONO1 users also have ONO access (VIP includes standard)
+            additional_claims["subscriptions"] = {"ONO": True, "ONO1": True}
+            subscription_message = "ONO1 (VIP) subscription with ONO access"
+        elif subscription_type == "both":
+            additional_claims["subscriptions"] = {"ONO": True, "ONO1": True}
+            subscription_message = "both ONO and ONO1 subscriptions"
+
     token = create_access_token(
         subject=user_id,
         additional_claims=additional_claims
     )
-    
+
     return create_success_response(
         data={
             "access_token": token,
             "token_type": "bearer",
+            "user_id": user_id,
+            "subscriptions": additional_claims.get("subscriptions", {}),
+            "subscription_type": subscription_type if include_subscriptions else "none",
             "warning": "This is a test token for development only"
         },
-        message="Test token created"
+        message=f"Test token created with {subscription_message}"
     )

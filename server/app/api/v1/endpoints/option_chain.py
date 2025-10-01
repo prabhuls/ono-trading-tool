@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from app.core.responses import create_success_response, create_error_response, ErrorCode
 from app.core.logging import get_logger
 from app.core.monitoring import monitor_performance, capture_errors
-from app.core.auth import conditional_jwt_token
+from app.core.auth import conditional_jwt_token, validate_ticker_subscription
 from app.core.security import JWTPayload
 from app.core.cache import redis_cache
 from app.schemas.option_chain import (
@@ -63,9 +63,9 @@ async def get_cached_option_chain(cache_key: str, fetch_func, ttl: int = 30):
 @capture_errors(level="error")
 async def get_option_chain(
     ticker: str = Path(
-        ..., 
-        description="Stock ticker symbol (supports SPY and SPX)", 
-        regex="^(SPY|SPX)$"
+        ...,
+        description="Stock ticker symbol (supports SPY, SPX, QQQ, IWM, GLD)",
+        regex="^(SPY|SPX|QQQ|IWM|GLD)$"
     ),
     expiration_date: Optional[str] = Query(
         None,
@@ -82,38 +82,44 @@ async def get_option_chain(
 ) -> JSONResponse:
     """
     Get option chain with overnight algorithm applied
-    
+
     Retrieves real-time option chain data and applies the sophisticated overnight options
     algorithm to identify optimal call debit spreads. The algorithm:
-    
+
     1. Filters strikes below current underlying price (ITM bias)
     2. Calculates spread costs (SPY: $1-wide spreads, SPX: $5-wide spreads)
     3. Applies maximum cost filtering
     4. Selects deepest ITM spread (lowest sell strike)
     5. Highlights BUY and SELL options
-    
+
     **Time Window**: Optimized for 3:00-4:00 PM ET trading window
-    
+
     **Spread Cost Ranges**:
     - SPY: Default $0.74, typical range $0.50-$2.00 for $1-wide spreads
     - SPX: Default $3.75, typical range $3.00-$20.00 for $5-wide spreads
-    
+
+    **VIP Access**: QQQ, IWM, GLD require ONO1 (VIP) subscription
+
     Args:
-        ticker: Stock ticker (supports SPY and SPX)
+        ticker: Stock ticker (supports SPY, SPX, QQQ, IWM, GLD)
         expiration_date: Option expiration date (optional, defaults to next trading day)
         max_cost: Maximum spread cost threshold in dollars (defaults vary by ticker)
-        
+
     Returns:
         JSONResponse with option chain data and algorithm results
-        
+
     Raises:
-        HTTPException: 400 for validation errors, 503 for API unavailable, 500 for server errors
+        HTTPException: 400 for validation errors, 403 for insufficient subscription, 503 for API unavailable, 500 for server errors
     """
     try:
+        # Validate ticker subscription (VIP check for QQQ, IWM, GLD)
+        validate_ticker_subscription(ticker, current_user)
+
         # Apply ticker-specific default max_cost if not provided
         if max_cost is None:
+            # SPX uses $3.75, all others (SPY, QQQ, IWM, GLD) use $0.74
             max_cost = 3.75 if ticker.upper() == "SPX" else 0.74
-            
+
         logger.info(
             "Fetching option chain with algorithm",
             ticker=ticker.upper(),
@@ -152,6 +158,9 @@ async def get_option_chain(
             message=option_chain_result.get("message", "Option chain retrieved successfully")
         )
         
+    except HTTPException as e:
+        # Re-raise HTTPException (including 403 from VIP validation) to preserve status code
+        raise
     except ExternalAPIError as e:
         logger.error("External API error fetching option chain", ticker=ticker, error=str(e))
         return create_error_response(
@@ -199,9 +208,9 @@ async def get_option_chain(
 @capture_errors(level="error")
 async def get_raw_option_chain(
     ticker: str = Path(
-        ..., 
-        description="Stock ticker symbol (supports SPY and SPX)", 
-        regex="^(SPY|SPX)$"
+        ...,
+        description="Stock ticker symbol (supports SPY, SPX, QQQ, IWM, GLD)",
+        regex="^(SPY|SPX|QQQ|IWM|GLD)$"
     ),
     expiration_date: Optional[str] = Query(
         None,
@@ -212,21 +221,26 @@ async def get_raw_option_chain(
 ) -> JSONResponse:
     """
     Get raw option chain data without algorithm
-    
+
     Retrieves real-time option chain data without applying the overnight options algorithm.
     Useful for debugging, analysis, or when you need unprocessed option data.
-    
+
+    **VIP Access**: QQQ, IWM, GLD require ONO1 (VIP) subscription
+
     Args:
-        ticker: Stock ticker (supports SPY and SPX)
+        ticker: Stock ticker (supports SPY, SPX, QQQ, IWM, GLD)
         expiration_date: Option expiration date (optional, defaults to next trading day)
-        
+
     Returns:
         JSONResponse with raw option chain data
-        
+
     Raises:
-        HTTPException: 400 for validation errors, 503 for API unavailable, 500 for server errors
+        HTTPException: 400 for validation errors, 403 for insufficient subscription, 503 for API unavailable, 500 for server errors
     """
     try:
+        # Validate ticker subscription (VIP check for QQQ, IWM, GLD)
+        validate_ticker_subscription(ticker, current_user)
+
         logger.info(
             "Fetching raw option chain",
             ticker=ticker.upper(),
@@ -297,6 +311,9 @@ async def get_raw_option_chain(
             message=result["message"]
         )
         
+    except HTTPException as e:
+        # Re-raise HTTPException (including 403 from VIP validation) to preserve status code
+        raise
     except ExternalAPIError as e:
         logger.error("External API error fetching raw option chain", ticker=ticker, error=str(e))
         return create_error_response(

@@ -397,7 +397,7 @@ async def conditional_jwt_token(
     token: Optional[str] = Depends(get_current_token)
 ) -> Optional[JWTPayload]:
     """
-    Conditionally require JWT token with ONO or ONOV subscription based on ENABLE_AUTH setting
+    Conditionally require JWT token with ONO or ONO1 subscription based on ENABLE_AUTH setting
 
     Args:
         token: JWT token from request
@@ -429,23 +429,23 @@ async def conditional_jwt_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Check for ONO or ONOV subscription
+    # Check for ONO or ONO1 subscription
     # Handle different subscription structures:
-    # 1. Direct boolean: {"ONO": true, "ONOV": true}
-    # 2. Array within FINMC: {"FINMC": ["ONO", "ONOV", ...]}
+    # 1. Direct boolean: {"ONO": true, "ONO1": true}
+    # 2. Array within FINMC: {"FINMC": ["ONO", "ONO1", ...]}
     has_ono = jwt_payload.get_subscription("ONO") is True
-    has_onov = jwt_payload.get_subscription("ONOV") is True
+    has_onov = jwt_payload.get_subscription("ONO1") is True
 
-    # Also check if ONO/ONOV are in FINMC array
+    # Also check if ONO/ONO1 are in FINMC array
     finmc_subscriptions = jwt_payload.get_subscription("FINMC")
     if finmc_subscriptions and isinstance(finmc_subscriptions, list):
         has_ono = has_ono or ("ONO" in finmc_subscriptions)
-        has_onov = has_onov or ("ONOV" in finmc_subscriptions)
+        has_onov = has_onov or ("ONO1" in finmc_subscriptions)
 
     if not (has_ono or has_onov):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="ONO or ONOV subscription required"
+            detail="ONO or ONO1 subscription required"
         )
 
     return jwt_payload
@@ -455,7 +455,7 @@ async def conditional_jwt_token_vip(
     token: Optional[str] = Depends(get_current_token)
 ) -> Optional[JWTPayload]:
     """
-    Conditionally require JWT token with ONOV (VIP) subscription based on ENABLE_AUTH setting
+    Conditionally require JWT token with ONO1 (VIP) subscription based on ENABLE_AUTH setting
 
     Args:
         token: JWT token from request
@@ -464,7 +464,7 @@ async def conditional_jwt_token_vip(
         JWTPayload if authenticated or auth disabled, None if auth disabled and no token
 
     Raises:
-        HTTPException: If auth is enabled and token is missing/invalid/lacks ONOV subscription
+        HTTPException: If auth is enabled and token is missing/invalid/lacks ONO1 subscription
     """
     # If auth is disabled, return None (no authentication required)
     if not settings.enable_auth:
@@ -487,21 +487,21 @@ async def conditional_jwt_token_vip(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Check for ONOV (VIP) subscription only
+    # Check for ONO1 (VIP) subscription only
     # Handle different subscription structures:
-    # 1. Direct boolean: {"ONOV": true}
-    # 2. Array within FINMC: {"FINMC": ["ONOV", ...]}
-    has_onov = jwt_payload.get_subscription("ONOV") is True
+    # 1. Direct boolean: {"ONO1": true}
+    # 2. Array within FINMC: {"FINMC": ["ONO1", ...]}
+    has_onov = jwt_payload.get_subscription("ONO1") is True
 
-    # Also check if ONOV is in FINMC array
+    # Also check if ONO1 is in FINMC array
     finmc_subscriptions = jwt_payload.get_subscription("FINMC")
     if finmc_subscriptions and isinstance(finmc_subscriptions, list):
-        has_onov = has_onov or ("ONOV" in finmc_subscriptions)
+        has_onov = has_onov or ("ONO1" in finmc_subscriptions)
 
     if not has_onov:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="ONOV (VIP) subscription required"
+            detail="ONO1 (VIP) subscription required"
         )
 
     return jwt_payload
@@ -543,3 +543,50 @@ async def public_jwt_token(
 
     # No subscription check - return the payload
     return jwt_payload
+
+
+def validate_ticker_subscription(ticker: str, jwt_payload: Optional[JWTPayload]) -> None:
+    """
+    Validate that the user has the required subscription for the given ticker
+
+    VIP-only tickers (require ONO1): QQQ, IWM, GLD
+    Standard tickers (require ONO or ONO1): SPY, XSP, SPX
+
+    Args:
+        ticker: Stock ticker symbol
+        jwt_payload: JWT payload from authenticated user
+
+    Raises:
+        HTTPException: If user lacks required subscription for the ticker
+    """
+    # If auth is disabled, allow all tickers
+    if not settings.enable_auth:
+        return
+
+    # If no jwt_payload (shouldn't happen if auth is enabled), raise error
+    if not jwt_payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # VIP-only tickers require ONO1 subscription
+    VIP_TICKERS = ["QQQ", "IWM", "GLD"]
+
+    if ticker.upper() in VIP_TICKERS:
+        # Check for ONO1 (VIP) subscription only
+        has_onov = jwt_payload.get_subscription("ONO1") is True
+
+        # Also check if ONO1 is in FINMC array
+        finmc_subscriptions = jwt_payload.get_subscription("FINMC")
+        if finmc_subscriptions and isinstance(finmc_subscriptions, list):
+            has_onov = has_onov or ("ONO1" in finmc_subscriptions)
+
+        if not has_onov:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"ONO1 (VIP) subscription required to access {ticker.upper()}"
+            )
+    # Standard tickers already validated by conditional_jwt_token dependency
+    # (which checks for ONO or ONO1)

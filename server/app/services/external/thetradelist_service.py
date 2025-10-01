@@ -1044,21 +1044,28 @@ class TheTradeListService(ExternalAPIService):
 
     async def get_sp_prices(self) -> Dict[str, Any]:
         """
-        Get real-time prices for SPY and SPX in a single API call
+        Deprecated: Use get_index_prices instead.
+        Kept for backward compatibility.
+        """
+        return await self.get_index_prices()
 
-        Uses the new sp-prices endpoint for efficient fetching
+    async def get_index_prices(self) -> Dict[str, Any]:
+        """
+        Get real-time prices for index/ETF symbols in a single API call
+
+        Uses the new index-prices endpoint for efficient fetching of SPY, SPX, QQQ, IWM, GLD
 
         Returns:
-            Dictionary with SPY and SPX price data including net change info
+            Dictionary with ticker price data including net change info
 
         Raises:
             ExternalAPIError: On API errors
         """
         try:
-            logger.info("Fetching SP prices from sp-prices endpoint")
+            logger.info("Fetching prices from index-prices endpoint")
 
             # Use the client from parent class
-            endpoint = "/v1/data/sp-prices"
+            endpoint = "/v1/data/index-prices"
             params = {"apiKey": self.api_key}
 
             # Make the request using the parent class client
@@ -1070,12 +1077,15 @@ class TheTradeListService(ExternalAPIService):
             result = {
                 "SPY": None,
                 "SPX": None,
+                "QQQ": None,
+                "IWM": None,
+                "GLD": None,
                 "timestamp": datetime.utcnow().isoformat() + "Z"
             }
 
             for item in data.get("data", []):
                 ticker = item.get("ticker")
-                if ticker in ["SPY", "SPX"]:
+                if ticker in ["SPY", "SPX", "QQQ", "IWM", "GLD"]:
                     result[ticker] = {
                         "ticker": ticker,
                         "price": float(item.get("price", 0)),
@@ -1085,17 +1095,20 @@ class TheTradeListService(ExternalAPIService):
                     }
 
             logger.info(
-                "SP prices retrieved successfully",
+                "Index prices retrieved successfully",
                 spy_price=result["SPY"]["price"] if result["SPY"] else None,
-                spx_price=result["SPX"]["price"] if result["SPX"] else None
+                spx_price=result["SPX"]["price"] if result["SPX"] else None,
+                qqq_price=result["QQQ"]["price"] if result["QQQ"] else None,
+                iwm_price=result["IWM"]["price"] if result["IWM"] else None,
+                gld_price=result["GLD"]["price"] if result["GLD"] else None
             )
 
             return result
 
         except Exception as e:
-            logger.error("Failed to get SP prices", error=str(e))
+            logger.error("Failed to get index prices", error=str(e))
             raise ExternalAPIError(
-                message=f"Failed to get SP prices: {str(e)}",
+                message=f"Failed to get index prices: {str(e)}",
                 service=self.service_name
             )
 
@@ -1103,11 +1116,11 @@ class TheTradeListService(ExternalAPIService):
         """
         Get current price for a single stock ticker
 
-        Uses sp-prices endpoint for SPY/SPX (more efficient and real-time)
+        Uses index-prices endpoint for SPY/SPX/QQQ/IWM/GLD (more efficient and real-time)
         Regular snapshot endpoint is used for other tickers
 
         Args:
-            ticker: Stock ticker symbol (e.g., "SPY", "XSP", "SPX")
+            ticker: Stock ticker symbol (e.g., "SPY", "XSP", "SPX", "QQQ", "IWM", "GLD")
 
         Returns:
             Stock price data with normalized format (current price only)
@@ -1116,7 +1129,7 @@ class TheTradeListService(ExternalAPIService):
             ExternalAPIError: On API errors or invalid ticker
         """
         # Validate ticker is one of the supported symbols
-        supported_tickers = {"SPY", "XSP", "SPX"}
+        supported_tickers = {"SPY", "XSP", "SPX", "QQQ", "IWM", "GLD"}
         ticker_upper = ticker.upper()
 
         if ticker_upper not in supported_tickers:
@@ -1128,10 +1141,10 @@ class TheTradeListService(ExternalAPIService):
         try:
             logger.info("Fetching stock price", ticker=ticker_upper)
 
-            # Use new sp-prices endpoint for SPY and SPX
-            if ticker_upper in ["SPY", "SPX"]:
-                sp_prices = await self.get_sp_prices()
-                ticker_data = sp_prices.get(ticker_upper)
+            # Use new index-prices endpoint for SPY, SPX, QQQ, IWM, GLD
+            if ticker_upper in ["SPY", "SPX", "QQQ", "IWM", "GLD"]:
+                index_prices = await self.get_index_prices()
+                ticker_data = index_prices.get(ticker_upper)
 
                 if not ticker_data:
                     raise ExternalAPIError(
@@ -1217,10 +1230,10 @@ class TheTradeListService(ExternalAPIService):
             ExternalAPIError: On API errors or invalid tickers
         """
         # Validate all tickers are supported
-        supported_tickers = {"SPY", "XSP", "SPX"}
+        supported_tickers = {"SPY", "XSP", "SPX", "QQQ", "IWM", "GLD"}
         tickers_upper = [ticker.upper() for ticker in tickers]
         invalid_tickers = [t for t in tickers_upper if t not in supported_tickers]
-        
+
         if invalid_tickers:
             raise ExternalAPIError(
                 message=f"Unsupported tickers: {', '.join(invalid_tickers)}. Supported: {', '.join(supported_tickers)}",
@@ -1485,6 +1498,46 @@ class TheTradeListService(ExternalAPIService):
                 final_data["results"] = filtered_results
                 final_data["resultsCount"] = len(filtered_results)
 
+            # Filter out mini options for ETFs (GLD, IWM, QQQ)
+            # Mini options have a 10x multiplier instead of 100x, which causes calculation errors
+            if underlying_ticker.upper() in ["GLD", "IWM", "QQQ"]:
+                original_count = len(final_data.get("results", []))
+                standard_contracts = []
+                mini_contracts_filtered = 0
+
+                for contract in final_data.get("results", []):
+                    ticker = contract.get("ticker", "")
+                    # Mini options end with "7" in the OCC symbol
+                    # Standard format: O:SPY251219C00600000
+                    # Mini format: O:GLD7251219C00240000 (note the "7" after ticker)
+                    if ticker and "7" in ticker:
+                        # Check if it's a mini option by examining ticker structure
+                        # Format: O:TICKER[7]YYMMDDCOOSTRIKE
+                        parts = ticker.split(":")
+                        if len(parts) == 2:
+                            symbol_part = parts[1]
+                            # Check if the 4th or 5th character (after ticker) is "7"
+                            # For GLD (3 chars): GLD7...
+                            # For IWM (3 chars): IWM7...
+                            # For QQQ (3 chars): QQQ7...
+                            ticker_len = len(underlying_ticker.upper())
+                            if ticker_len < len(symbol_part) and symbol_part[ticker_len] == "7":
+                                mini_contracts_filtered += 1
+                                continue  # Skip mini options
+
+                    standard_contracts.append(contract)
+
+                if mini_contracts_filtered > 0:
+                    logger.info(
+                        "Filtered out mini options",
+                        underlying_ticker=underlying_ticker.upper(),
+                        original_count=original_count,
+                        mini_filtered=mini_contracts_filtered,
+                        standard_remaining=len(standard_contracts)
+                    )
+                    final_data["results"] = standard_contracts
+                    final_data["resultsCount"] = len(standard_contracts)
+
             logger.info(
                 "All options contracts retrieved successfully",
                 underlying_ticker=underlying_ticker.upper(),
@@ -1736,8 +1789,8 @@ class TheTradeListService(ExternalAPIService):
             logger.info("Getting next available expiration from API", ticker=ticker)
             
             # MAJOR OPTIMIZATION: For common tickers, calculate expiration instead of fetching
-            if ticker in ["SPY", "SPX"]:
-                # Both SPY and SPX have daily options, return next trading day
+            if ticker in ["SPY", "SPX", "QQQ", "IWM", "GLD"]:
+                # All these tickers have daily options, return next trading day
                 # SPX has both daily (SPX) and weekly (SPXW) options available
                 return self._calculate_next_trading_day()
 
@@ -1900,8 +1953,20 @@ class TheTradeListService(ExternalAPIService):
         """
         if not expiration_date:
             expiration_date = await self.get_next_trading_day_expiration(ticker)
-        
+
         try:
+            # Get current ET time for debugging
+            from zoneinfo import ZoneInfo
+            et_now = datetime.now(ZoneInfo('America/New_York'))
+
+            logger.info(
+                "=== OPTION CHAIN DEBUG START ===",
+                ticker=ticker,
+                calculated_expiration=expiration_date,
+                current_et_time=et_now.strftime("%Y-%m-%d %H:%M:%S %Z"),
+                current_et_date=et_now.strftime("%Y-%m-%d")
+            )
+
             logger.info(
                 "Building option chain with pricing",
                 ticker=ticker,
@@ -1941,17 +2006,26 @@ class TheTradeListService(ExternalAPIService):
                 target_strikes_around_price=30  # Target strikes around current price for analysis
             )
             
-            logger.info(
-                "Retrieved options contracts",
-                ticker=ticker,
-                expiration_date=expiration_date,
-                total_results=len(contracts_data.get("results", []))
-            )
-            
             contracts = contracts_data.get("results", [])
+
+            # Extract available expiration dates for debugging
+            available_expirations = set()
+            for contract in contracts:
+                exp = contract.get("expiration_date")
+                if exp:
+                    available_expirations.add(exp)
+
+            logger.info(
+                "Retrieved options contracts from API",
+                ticker=ticker,
+                target_expiration=expiration_date,
+                total_raw_results=len(contracts),
+                available_expirations=sorted(list(available_expirations))[:10]  # Show first 10
+            )
+
             if not contracts:
                 logger.warning(
-                    "No options contracts found",
+                    "No options contracts found from API",
                     ticker=ticker,
                     expiration_date=expiration_date
                 )
@@ -1980,15 +2054,15 @@ class TheTradeListService(ExternalAPIService):
             # Current price already fetched above and validated - using current_underlying_price variable
             
             # Filter to only near-the-money contracts
-            # For SPY: within $15 of current price
+            # For SPY, QQQ, IWM, GLD: within $15 of current price
             # For SPX: Use adaptive range - all available strikes if deep ITM situation
-            if ticker == "SPY":
+            if ticker in ["SPY", "QQQ", "IWM", "GLD"]:
                 price_range = 15
                 nearby_contracts = [
                     contract for contract in call_contracts
                     if abs(float(contract.get("strike_price", 0)) - current_underlying_price) <= price_range
                 ]
-            else:  # SPX
+            elif ticker == "SPX":
                 # Check if we're in a deep ITM situation (all strikes significantly below current price)
                 strike_prices = [float(contract.get("strike_price", 0)) for contract in call_contracts]
                 max_available_strike = max(strike_prices) if strike_prices else 0
@@ -2012,7 +2086,14 @@ class TheTradeListService(ExternalAPIService):
                         contract for contract in call_contracts
                         if abs(float(contract.get("strike_price", 0)) - current_underlying_price) <= price_range
                     ]
-            
+            else:
+                # Default for any other tickers - use $15 range like SPY
+                price_range = 15
+                nearby_contracts = [
+                    contract for contract in call_contracts
+                    if abs(float(contract.get("strike_price", 0)) - current_underlying_price) <= price_range
+                ]
+
             logger.info(
                 "Optimized contract selection",
                 ticker=ticker,
@@ -2606,9 +2687,9 @@ class TheTradeListService(ExternalAPIService):
             ExternalAPIError: On API errors or data processing failures
         """
         # Validate ticker
-        supported_tickers = {"SPY", "XSP", "SPX"}
+        supported_tickers = {"SPY", "XSP", "SPX", "QQQ", "IWM", "GLD"}
         ticker_upper = ticker.upper()
-        
+
         if ticker_upper not in supported_tickers:
             raise ExternalAPIError(
                 message=f"Ticker {ticker} not supported for intraday data. Supported: {', '.join(supported_tickers)}",
@@ -2618,7 +2699,10 @@ class TheTradeListService(ExternalAPIService):
         # Define ISIN codes for supported tickers
         isin_codes = {
             "SPY": "US78462F1030",  # SPY ISIN
-            "SPX": "US78378X1072"   # SPX ISIN
+            "SPX": "US78378X1072",  # SPX ISIN
+            "QQQ": "US46090E1038",  # QQQ ISIN
+            "IWM": "US4642876555",  # IWM ISIN
+            "GLD": "US78463V1070"   # GLD ISIN
         }
         
         # Route SPY and SPX to the ISIN-data endpoint for real-time intraday data

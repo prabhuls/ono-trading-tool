@@ -46,6 +46,9 @@ class OvernightOptionsAlgorithm:
         self.max_cost_threshold = max_cost_threshold
         self.max_cost_threshold_spy = 0.74
         self.max_cost_threshold_spx = 3.75
+        self.max_cost_threshold_qqq = 0.74  # QQQ uses same as SPY
+        self.max_cost_threshold_iwm = 0.74  # IWM uses same as SPY
+        self.max_cost_threshold_gld = 0.74  # GLD uses same as SPY
         self.thetradelist_service = get_thetradelist_service()
     
     async def get_current_price(self, ticker: str) -> float:
@@ -88,6 +91,39 @@ class OvernightOptionsAlgorithm:
             Spread cost using mid-market pricing as float
         """
         try:
+            # Validate that we're not dealing with mini options (would have "7" in ticker)
+            buy_ticker = buy_option.get("contract_ticker", "")
+            sell_ticker = sell_option.get("contract_ticker", "")
+
+            if ticker in ["GLD", "IWM", "QQQ"]:
+                # Check for mini option indicators (ticker ends with "7")
+                if buy_ticker and "7" in buy_ticker:
+                    # Extract the base symbol to check for mini option pattern
+                    if ":" in buy_ticker:
+                        symbol_part = buy_ticker.split(":")[1]
+                        ticker_len = len(ticker)
+                        if ticker_len < len(symbol_part) and symbol_part[ticker_len] == "7":
+                            logger.warning(
+                                "Mini option detected in buy leg - skipping",
+                                ticker=ticker,
+                                buy_contract=buy_ticker,
+                                buy_strike=buy_option.get("strike")
+                            )
+                            return 0.0
+
+                if sell_ticker and "7" in sell_ticker:
+                    if ":" in sell_ticker:
+                        symbol_part = sell_ticker.split(":")[1]
+                        ticker_len = len(ticker)
+                        if ticker_len < len(symbol_part) and symbol_part[ticker_len] == "7":
+                            logger.warning(
+                                "Mini option detected in sell leg - skipping",
+                                ticker=ticker,
+                                sell_contract=sell_ticker,
+                                sell_strike=sell_option.get("strike")
+                            )
+                            return 0.0
+
             # Calculate mid-market price for buy option (lower strike)
             buy_bid = float(buy_option.get("bid", 0))
             buy_ask = float(buy_option.get("ask", 0))
@@ -108,6 +144,23 @@ class OvernightOptionsAlgorithm:
             # Reject if bid-ask too wide (>10% of spread width)
             if (natural_cost - spread_cost) > (spread_width * 0.10):
                 return 0.0  # Too wide, reject
+
+            # Add validation: spread cost should be less than spread width
+            # For a $1-wide spread, cost should be < $1.00
+            # For a $5-wide spread, cost should be < $5.00
+            expected_spread_width = 1.00 if ticker in ["SPY", "QQQ", "IWM", "GLD"] else 5.00
+            if spread_cost >= expected_spread_width:
+                logger.warning(
+                    "Spread cost exceeds spread width - likely data issue",
+                    ticker=ticker,
+                    buy_strike=buy_option.get("strike"),
+                    sell_strike=sell_option.get("strike"),
+                    spread_cost=spread_cost,
+                    expected_width=expected_spread_width,
+                    buy_mid=buy_mid,
+                    sell_mid=sell_mid
+                )
+                return 0.0  # Reject invalid spread
 
             # Ensure cost is not negative (which would be invalid for a debit spread)
             return max(0.0, spread_cost)
@@ -138,8 +191,8 @@ class OvernightOptionsAlgorithm:
         if spread_cost <= 0:
             raise ValueError(f"Invalid spread cost: {spread_cost}. Must be positive.")
 
-        # Spread width: SPY uses $1, SPX uses $5
-        max_value = 1.00 if ticker == "SPY" else 5.00
+        # Spread width: SPY, QQQ, IWM, GLD use $1; SPX uses $5
+        max_value = 1.00 if ticker in ["SPY", "QQQ", "IWM", "GLD"] else 5.00
         max_reward = max_value - spread_cost
         max_risk = spread_cost
         roi_potential = (max_reward / spread_cost * 100)
@@ -312,10 +365,22 @@ class OvernightOptionsAlgorithm:
         
         # Sort contracts by strike price for easier pairing
         sorted_contracts = sorted(itm_contracts, key=lambda x: float(x.get("strike", 0)))
-        
+
         # Determine spread width and max cost based on ticker
-        spread_width = 1.0 if ticker == "SPY" else 5.0
-        max_cost = self.max_cost_threshold_spy if ticker == "SPY" else self.max_cost_threshold_spx
+        # SPY, QQQ, IWM, GLD all use $1 spreads; SPX uses $5 spreads
+        if ticker in ["SPY", "QQQ", "IWM", "GLD"]:
+            spread_width = 1.0
+            if ticker == "QQQ":
+                max_cost = self.max_cost_threshold_qqq
+            elif ticker == "IWM":
+                max_cost = self.max_cost_threshold_iwm
+            elif ticker == "GLD":
+                max_cost = self.max_cost_threshold_gld
+            else:  # SPY
+                max_cost = self.max_cost_threshold_spy
+        else:  # SPX
+            spread_width = 5.0
+            max_cost = self.max_cost_threshold_spx
         
         # Log detailed contract information
         contract_strikes = [float(c.get("strike", 0)) for c in sorted_contracts]
@@ -571,10 +636,27 @@ class OvernightOptionsAlgorithm:
             ExternalAPIError: If API calls fail
         """
         # Validate ticker
-        valid_tickers = {"SPY", "SPX", "XSP"}
+        valid_tickers = {"SPY", "SPX", "XSP", "QQQ", "IWM", "GLD"}
         ticker = ticker.upper()
         if ticker not in valid_tickers:
             raise ValueError(f"Invalid ticker: {ticker}. Must be one of {valid_tickers}")
+
+        # Special validation for GLD - only allow on Tuesday and Thursday (ET timezone)
+        if ticker == "GLD":
+            from zoneinfo import ZoneInfo
+
+            # Get current time in ET timezone
+            et_tz = ZoneInfo("America/New_York")
+            et_now = datetime.now(et_tz)
+            current_day_et = et_now.weekday()  # 0=Monday, 1=Tuesday, ..., 4=Friday
+
+            if current_day_et not in [1, 3]:  # Tuesday=1, Thursday=3
+                day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                current_day_name = day_names[current_day_et]
+                raise ValueError(
+                    f"GLD options are only available on Tuesdays and Thursdays (ET). "
+                    f"Today is {current_day_name} in ET. Please try again on a valid trading day."
+                )
 
         # Validate date format if provided
         if expiration_date:
@@ -590,29 +672,63 @@ class OvernightOptionsAlgorithm:
                 expiration_date=expiration_date,
                 max_cost_threshold=self.max_cost_threshold
             )
-            
+
             # Step 1: Get current underlying price
             current_price = await self.get_current_price(ticker)
-            
+            logger.info(
+                "=== ALGORITHM STEP 1: Current price retrieved ===",
+                ticker=ticker,
+                current_price=current_price
+            )
+
             # Step 2: Get option chain with pricing
             option_chain_data = await self.thetradelist_service.build_option_chain_with_pricing(
                 ticker=ticker,
                 expiration_date=expiration_date
             )
-            
+
             contracts = option_chain_data.get("contracts", [])
+            logger.info(
+                "=== ALGORITHM STEP 2: Option chain data retrieved ===",
+                ticker=ticker,
+                total_contracts=len(contracts),
+                expiration=option_chain_data.get("expiration_date")
+            )
+
             if not contracts:
                 logger.warning("No option contracts available for algorithm", ticker=ticker)
                 return self._create_empty_result(ticker, expiration_date, current_price)
             
             # Step 3: Filter for ITM strikes (below current price)
             itm_contracts = self.filter_itm_strikes(contracts, current_price, ticker)
-            
+            logger.info(
+                "=== ALGORITHM STEP 3: ITM filtering complete ===",
+                ticker=ticker,
+                total_contracts=len(contracts),
+                itm_contracts=len(itm_contracts),
+                current_price=current_price
+            )
+
             # Step 4: Find qualifying spreads (width varies by ticker)
             qualifying_spreads = self.find_qualifying_spreads(itm_contracts, ticker, current_price)
+            logger.info(
+                "=== ALGORITHM STEP 4: Qualifying spreads found ===",
+                ticker=ticker,
+                itm_contracts=len(itm_contracts),
+                qualifying_spreads=len(qualifying_spreads),
+                max_cost_threshold=self._get_max_cost_for_ticker(ticker)
+            )
 
             # Step 5: Select optimal spread (deepest ITM)
             optimal_spread = self.select_optimal_spread(qualifying_spreads)
+            logger.info(
+                "=== ALGORITHM STEP 5: Optimal spread selection ===",
+                ticker=ticker,
+                qualifying_spreads_count=len(qualifying_spreads),
+                optimal_spread_selected=optimal_spread is not None,
+                buy_strike=optimal_spread["buy_strike"] if optimal_spread else None,
+                sell_strike=optimal_spread["sell_strike"] if optimal_spread else None
+            )
             
             # Debug logging when no spreads found
             if not optimal_spread and len(qualifying_spreads) == 0:
@@ -639,7 +755,7 @@ class OvernightOptionsAlgorithm:
                     "current_price": current_price,
                     "total_contracts": len(contracts),
                     "algorithm_applied": True,
-                    "max_cost_threshold": self.max_cost_threshold_spy if ticker == "SPY" else self.max_cost_threshold_spx,
+                    "max_cost_threshold": self._get_max_cost_for_ticker(ticker),
                     "timestamp": datetime.utcnow().isoformat() + "Z"
                 },
                 "algorithm_result": {
@@ -702,7 +818,7 @@ class OvernightOptionsAlgorithm:
                 "current_price": current_price,
                 "total_contracts": 0,
                 "algorithm_applied": True,
-                "max_cost_threshold": self.max_cost_threshold_spy if ticker == "SPY" else self.max_cost_threshold_spx,
+                "max_cost_threshold": self._get_max_cost_for_ticker(ticker),
                 "timestamp": datetime.utcnow().isoformat() + "Z"
             },
             "algorithm_result": {
@@ -722,9 +838,24 @@ class OvernightOptionsAlgorithm:
             "message": "No option contracts available for analysis"
         }
     
+    def _get_max_cost_for_ticker(self, ticker: str) -> float:
+        """Get the max cost threshold for a given ticker"""
+        if ticker == "SPY":
+            return self.max_cost_threshold_spy
+        elif ticker == "SPX":
+            return self.max_cost_threshold_spx
+        elif ticker == "QQQ":
+            return self.max_cost_threshold_qqq
+        elif ticker == "IWM":
+            return self.max_cost_threshold_iwm
+        elif ticker == "GLD":
+            return self.max_cost_threshold_gld
+        else:
+            return self.max_cost_threshold  # fallback
+
     def _get_result_message(self, optimal_spread: Optional[Dict[str, Any]], qualified_count: int, ticker: str = "SPY") -> str:
         """Get appropriate result message based on algorithm outcome"""
-        spread_description = "$1-wide" if ticker == "SPY" else "$5-wide"
+        spread_description = "$1-wide" if ticker in ["SPY", "QQQ", "IWM", "GLD"] else "$5-wide"
         
         if optimal_spread:
             return f"Optimal {spread_description} {ticker} spread: {optimal_spread['buy_strike']}/{optimal_spread['sell_strike']} at ${optimal_spread['spread_cost']} cost"

@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from app.core.responses import create_success_response, create_error_response, ErrorCode
 from app.core.logging import get_logger
 from app.core.monitoring import monitor_performance, capture_errors
-from app.core.auth import conditional_jwt_token
+from app.core.auth import conditional_jwt_token, validate_ticker_subscription
 from app.core.security import JWTPayload
 from app.core.cache import redis_cache
 from app.schemas.market_data import (
@@ -235,31 +235,35 @@ async def get_market_health() -> JSONResponse:
 @monitor_performance("api.market_data.current_price")
 @capture_errors(level="error")
 async def get_current_price(
-    ticker: str = Path(..., description="Stock ticker symbol (SPY, XSP, SPX)", regex="^(SPY|XSP|SPX)$"),
+    ticker: str = Path(..., description="Stock ticker symbol (SPY, XSP, SPX, QQQ, IWM, GLD)", regex="^(SPY|XSP|SPX|QQQ|IWM|GLD)$"),
     current_user: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ) -> JSONResponse:
     """
     Get current price for a single stock ticker
-    
+
     Retrieves real-time price data including:
     - Current price
     - Price change from previous close
     - Percentage change
     - Timestamp of data retrieval
-    
-    Supports the following tickers: SPY, XSP, SPX
+
+    Supports the following tickers: SPY, XSP, SPX, QQQ, IWM, GLD
+    Note: QQQ, IWM, GLD require ONO1 (VIP) subscription
     Data is cached for 30 seconds for optimal performance.
-    
+
     Args:
-        ticker: Stock ticker symbol (SPY, XSP, or SPX)
-        
+        ticker: Stock ticker symbol
+
     Returns:
         JSONResponse with current stock price data
-        
+
     Raises:
-        HTTPException: 400 for invalid ticker, 503 for API unavailable, 500 for server errors
+        HTTPException: 400 for invalid ticker, 403 for insufficient subscription, 503 for API unavailable, 500 for server errors
     """
     try:
+        # Validate ticker subscription (VIP check for QQQ, IWM, GLD)
+        validate_ticker_subscription(ticker, current_user)
+
         logger.info(
             "Fetching current stock price",
             ticker=ticker.upper(),
@@ -512,40 +516,45 @@ async def get_spy_price(
 @monitor_performance("api.market_data.intraday_chart")
 @capture_errors(level="error")
 async def get_intraday_chart_data(
-    ticker: str = Path(..., description="Stock ticker symbol (SPY, XSP, SPX)", regex="^(SPY|XSP|SPX)$"),
+    ticker: str = Path(..., description="Stock ticker symbol (SPY, XSP, SPX, QQQ, IWM, GLD)", regex="^(SPY|XSP|SPX|QQQ|IWM|GLD)$"),
     interval: str = Query("5m", description="Time interval", regex="^(1m|5m|15m|30m|1h)$"),
     period: str = Query("1d", description="Time period", regex="^(1d|5d|1w)$"),
     buy_strike: Optional[float] = Query(None, description="Buy strike price for benchmark line", ge=0),
-    sell_strike: Optional[float] = Query(None, description="Sell strike price for benchmark line", ge=0)
+    sell_strike: Optional[float] = Query(None, description="Sell strike price for benchmark line", ge=0),
+    current_user: Optional[JWTPayload] = Depends(conditional_jwt_token)
 ) -> JSONResponse:
     """
-    Get intraday chart data for SPY panel with real market data
-    
+    Get intraday chart data for ticker with real market data
+
     Retrieves OHLCV intraday data for chart visualization including:
     - Price candles with open, high, low, close, volume
-    - Current market price 
+    - Current market price
     - Optional benchmark strike lines
     - Market hours metadata
-    
+
     Supports different time intervals (1m, 5m, 15m, 30m, 1h) and periods (1d, 5d, 1w).
-    
+
     Note: SPY and SPX now use ISIN endpoint with true 1-minute data. XSP uses range-data endpoint.
+    QQQ, IWM, GLD require ONO1 (VIP) subscription.
     Data is cached for 60-120 seconds for real-time feel while managing API limits.
-    
+
     Args:
-        ticker: Stock ticker symbol (SPY, XSP, SPX)
+        ticker: Stock ticker symbol
         interval: Time interval between data points (default: "5m")
-        period: Time period for historical data (default: "1d")  
+        period: Time period for historical data (default: "1d")
         buy_strike: Optional buy strike price for benchmark line
         sell_strike: Optional sell strike price for benchmark line
-        
+
     Returns:
         JSONResponse with intraday chart data including OHLCV candles and benchmark lines
-        
+
     Raises:
-        HTTPException: 400 for invalid ticker/params, 503 for API unavailable, 500 for server errors
+        HTTPException: 400 for invalid ticker/params, 403 for insufficient subscription, 503 for API unavailable, 500 for server errors
     """
     try:
+        # Validate ticker subscription (VIP check for QQQ, IWM, GLD)
+        validate_ticker_subscription(ticker, current_user)
+
         logger.info(
             "Fetching intraday chart data",
             ticker=ticker.upper(),
